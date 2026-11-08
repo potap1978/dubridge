@@ -39,18 +39,17 @@ if (process.platform === 'win32') {
 
   if (process.env.DUB_SKIP_BROWSER_DOWNLOAD !== 'true') {
     console.log('\n[dubridge] Проверка наличия браузера...');
-    downloadBrowser(path.join(targetDir, 'ungooglium_ds'))
-      .then((res) => {
-        if (!res.skipped) console.log('[dubridge] Браузер успешно установлен.');
-        else console.log('[dubridge] Браузер уже установлен.');
-      })
-      .catch((err) => {
-        console.warn('\n[dubridge] ВНИМАНИЕ: Не удалось автоматически скачать браузер.');
-        console.warn(`[dubridge] Причина: ${err.message}`);
-        console.warn('[dubridge] Скачайте вручную с https://github.com/portapps/ungoogled-chromium-portable/releases');
-        console.warn('[dubridge] И положите ungoogled-chromium-portable.exe в C:\\DeepSeek\\ungooglium_ds\\');
-        console.warn('[dubridge] (Чтобы отключить авто-загрузку при установке: DUB_SKIP_BROWSER_DOWNLOAD=true)\n');
-      });
+    try {
+      const res = await downloadBrowser(path.join(targetDir, 'ungooglium_ds'));
+      if (!res.skipped) console.log('[dubridge] Браузер успешно установлен:', res.path);
+      else console.log('[dubridge] Браузер уже установлен:', res.path);
+    } catch (err) {
+      console.warn('\n[dubridge] ВНИМАНИЕ: Не удалось автоматически скачать браузер.');
+      console.warn(`[dubridge] Причина: ${err.message}`);
+      console.warn('[dubridge] Скачайте вручную с https://github.com/portapps/ungoogled-chromium-portable/releases');
+      console.warn('[dubridge] И положите ungoogled-chromium-portable.exe в C:\\DeepSeek\\ungooglium_ds\\');
+      console.warn('[dubridge] (Чтобы отключить авто-загрузку при установке: DUB_SKIP_BROWSER_DOWNLOAD=true)\n');
+    }
   } else {
     console.log('\n[dubridge] Авто-загрузка браузера отключена (DUB_SKIP_BROWSER_DOWNLOAD=true).');
   }
