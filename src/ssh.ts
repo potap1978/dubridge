@@ -77,9 +77,28 @@ export async function sshProbe(host: string, port: number = 22, auth: AuthConfig
 }
 
 export async function sshExec(host: string, command: string, cwd?: string, port: number = 22, auth: AuthConfig = { type: "key" }, timeout: number = 60000): Promise<string> {
-  // Простейшая защита от катастрофических команд
-  if (/rm\s+-rf\s+\//.test(command) || /\bmkfs\b/.test(command)) {
-    throw new Error("COMMAND_BLOCKED: catastrophic command");
+  // Жёсткая защита от катастрофических команд (отказ без запроса подтверждения)
+  const CATASTROPHIC_PATTERNS = [
+    /rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)\s+\/(?:\s|$|\*)/i, // rm -rf /, rm -rf /*
+    /rm\s+-rf\s+--no-preserve-root\s+\//i,
+    /rm\s+-rf\s+(?:\/etc|\/boot|\/var|\/usr|\/bin|\/sbin|\/lib|~|\$HOME)(?:\s|$|\/)/i, // удаление критических папок
+    /\bmkfs(?:\.[a-zA-Z0-9]+)?\b/i, // mkfs, mkfs.ext4
+    /\bdd\b.*\bof=\/dev\/(?:sd|hd|nvme|vd|mmcblk|xvd)/i, // запись напрямую на диск
+    /\b(?:echo|cat|tee)\b.*>\s*\/dev\/(?:sd|hd|nvme|vd|mmcblk|xvd)/i,
+    /:﴾﴿\s*{\s*:\|:&\s*};:/i, // fork bomb
+    /chmod\s+-[a-zA-Z]*R[a-zA-Z]*\s+777\s+\/(?:\s|$)/i,
+    /(?:echo|cat|printf)\s+.*>\s*\/etc\/(?:passwd|shadow|sudoers)/i, // перезапись ключевых файлов
+    /\binit\s+0\b/i, // немедленное выключение
+    /\bshutdown\b/i,
+    /\breboot\b/i,
+    /\bpoweroff\b/i,
+    /\bhalt\b/i
+  ];
+
+  for (const pattern of CATASTROPHIC_PATTERNS) {
+    if (pattern.test(command)) {
+      throw new Error("COMMAND_BLOCKED: catastrophic command (server destruction attempt)");
+    }
   }
 
   // Спрашиваем подтверждение, если команда потенциально мутирующая
