@@ -15,7 +15,7 @@ set "PATH=%AppData%\npm;%TARGET_DIR%node;%PATH%"
 
 REM --- Read DUB_CDP_PORT from .env if exists ---
 if exist "%ENV_FILE%" (
-  for /f "usebackq tokens=1,* delims==" %%A in ("%ENV_FILE%") do (
+  for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%ENV_FILE%") do (
     if /i "%%A"=="DUB_CDP_PORT" (
       if not "%%B"=="" set "PORT=%%B"
     )
