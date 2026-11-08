@@ -3,14 +3,15 @@ chcp 65001 >nul
 setlocal EnableDelayedExpansion
 
 REM ========== Settings ==========
-set "NODE_DIR=%~dp0node"
-set "CLI_DIR=%~dp0dubridge"
-set "CHROME_EXE=%~dp0ungooglium_ds\ungoogled-chromium-portable.exe"
-set "PROFILE_DIR=%~dp0chrome-profile"
-set "ENV_FILE=%~dp0.env"
-if not exist "%ENV_FILE%" set "ENV_FILE=%~dp0dubridge\.env"
+set "TARGET_DIR=%~dp0"
+set "CHROME_EXE=%TARGET_DIR%ungooglium_ds\ungoogled-chromium-portable.exe"
+set "PROFILE_DIR=%TARGET_DIR%chrome-profile"
+set "ENV_FILE=%TARGET_DIR%.env"
 set "PORT=9222"
 REM ==============================
+
+REM Add AppData\npm and local node to PATH
+set "PATH=%AppData%\npm;%TARGET_DIR%node;%PATH%"
 
 REM --- Read DUB_CDP_PORT from .env if exists ---
 if exist "%ENV_FILE%" (
@@ -22,12 +23,14 @@ if exist "%ENV_FILE%" (
 )
 echo [..] using CDP port: %PORT%
 
-set "PATH=%NODE_DIR%;%PATH%"
 set "DUB_CDP_PORT=%PORT%"
+set "DUB_PROMPT_FILE=%TARGET_DIR%prompts\deepseek-system-prompt.md"
 
-where node >nul 2>nul
+REM Check if dubridge is installed
+where dubridge >nul 2>nul
 if errorlevel 1 (
-  echo [Error] node not found: %NODE_DIR%
+  echo [Error] dubridge command not found.
+  echo Please install it first: npm i -g github:potap1978/dubridge
   pause & exit /b 1
 )
 
@@ -62,9 +65,9 @@ echo [OK] port is ready
 :runcli
 echo.
 echo [..] starting dubridge...
-cd /d "%~dp0"
+cd /d "%TARGET_DIR%"
 
-node "%CLI_DIR%\dist\index.js" run --no-launch -w . -p "Начинай работу, отправь системный промпт и жди моей команды."
+call dubridge run --no-launch -w . -p "Начинай работу, отправь системный промпт и жди моей команды."
 
 pause
 exit /b 0

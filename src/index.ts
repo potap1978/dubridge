@@ -28,6 +28,15 @@ If no action is needed, reply with normal text. Sandbox root is the workspace di
 function loadSystemPrompt(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
+  
+  // Приоритет: DUB_PROMPT_FILE > внутренний prompts/ > DEFAULT_PROMPT
+  const envPath = process.env.DUB_PROMPT_FILE;
+  if (envPath && fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, "utf8");
+    const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
+    return match ? match[1].trim() : content;
+  }
+  
   const promptPath = path.resolve(__dirname, "..", "prompts", "deepseek-system-prompt.md");
   if (fs.existsSync(promptPath)) {
     const content = fs.readFileSync(promptPath, "utf8");

@@ -5,8 +5,9 @@
   "type": "module",
   "bin": { "dubridge": "dist/index.js" },
   "main": "dist/index.js",
-  "files": ["dist", "prompts", "README.md", "LICENSE", ".env.example", "run.bat"],
+  "files": ["dist", "prompts", "scripts", "README.md", "LICENSE", ".env.example", "run.bat"],
   "scripts": {
+    "postinstall": "node scripts/postinstall.js",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
