@@ -1,63 +1,81 @@
 # dubridge
 
-## Что нужно установить заранее
+## 1. Требования
 
-1. **Node.js (версия 20 или выше)** — https://nodejs.org
-   Проверка: `node --version`
-2. **Git** — https://git-scm.com
-   Проверка: `git --version`
-3. **Google Chrome или Chromium** — библиотека использует уже установленный в системе браузер.
-   Если Chrome установлен в нестандартное место, задайте переменную окружения `CHROME_PATH`.
+```powershell
+node --version   # >= 20
+git --version
+```
 
-## Установка
+Node.js: https://nodejs.org
+Git: https://git-scm.com
+Chrome/Chromium: установить в системе
 
-```bash
+## 2. Установка
+
+```powershell
 npm i -g github:potap1978/dubridge
 ```
 
-На Windows во время установки автоматически создаётся структура в `C:\DeepSeek` (папки `ungooglium_ds`, `prompts`, `chrome-profile`, файлы `run.bat` и `.env`).
+Автоматически создаётся:
 
-## Использование
-
-```bash
-dubridge run -w /path/to/repo -p "твой запрос"
+```
+C:\DeepSeek\
+  run.bat
+  .env
+  prompts\deepseek-system-prompt.md
+  ungooglium_ds\
+  chrome-profile\
 ```
 
-На Windows удобнее запускать через `C:\DeepSeek\run.bat` — скрипт сам поднимет браузер с CDP и передаст агенту системный промпт.
+## 3. Браузер
 
-## Настройка (опционально)
+```powershell
+copy C:\path\ungoogled-chromium-portable.exe C:\DeepSeek\ungooglium_ds\
+dir C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
+```
 
-Скопируйте `.env.example` в `.env` и настройте под себя. Все переменные опциональны.
+## 4. .env
 
-Основные:
-- `DUB_WORKSPACE_ROOT` — рабочий каталог (по умолчанию текущий)
-- `DUB_LAUNCH_CHROME=false` — подключиться к уже запущенному Chrome (порт 9222)
-- `DUB_AUTO_APPROVE_COMMANDS=true` — выполнять все команды без whitelist (ОПАСНО)
-- `DUB_COMMAND_WHITELIST_EXTRA` — дополнительные разрешённые команды
-- `DUB_MAX_ITERATIONS` — лимит итераций агента (по умолчанию 50)
-- `DUB_SSH_ALLOW_NON_TTY_MUTATIONS` — разрешить мутации по SSH без TTY-подтверждения (по умолчанию `false`, ОПАСНО)
+```powershell
+notepad C:\DeepSeek\.env
+```
 
-## SSH-инструменты
+```
+DUB_CDP_PORT=9222
+DUB_WORKSPACE_ROOT=C:\path\to\repo
+```
 
-Агент умеет работать с удалёнными хостами:
+## 5. Запуск
 
-- `ssh_probe` — read-only разведка (`whoami`, `hostname`, `pwd`, `uname -a`, `id`)
-- `ssh_exec` — выполнение команд (с защитой, см. таблицу ниже)
-- `ssh_copy` — загрузка/скачивание файлов через SFTP
+```powershell
+C:\DeepSeek\run.bat
+```
 
-Аутентификация: ключи из `~/.ssh` (`id_ed25519`, `id_rsa`) или пароль через env-переменную (`password_env`). Пароль в открытом виде не рекомендуется.
+## 6. Остановка
 
-### Защита SSH (3 слоя)
+```powershell
+Ctrl+C в окне run.bat, затем закрыть браузер
+```
 
-| Команда | TTY (run.bat) | Non-TTY (CI, cron) |
-|---|---|---|
-| `cat`, `ls`, `ps`, `df`, `journalctl`, `systemctl status`, `git status`, `docker ps` | ✅ сразу | ✅ сразу |
-| `systemctl restart/stop`, `apt install/remove`, `rm`, `chmod`, `sed -i` | ⚠️ `y/N` | ❌ `COMMAND_DENIED` |
-| `rm -rf /`, `mkfs`, `dd of=/dev/sd*`, fork bomb, `> /etc/passwd`, `chmod -R 777 /`, `shutdown`/`reboot`/`poweroff`/`halt` | ❌ `COMMAND_BLOCKED` | ❌ `COMMAND_BLOCKED` |
-| `ssh_copy` с `dst` в `/etc`, `/boot`, `/usr`, `/var/lib`, `/root`, `/bin`, `/sbin`, `/lib`, `/dev`, `/proc`, `/sys`, `/var/log`, `/var/run` | ❌ `COMMAND_BLOCKED` | ❌ `COMMAND_BLOCKED` |
+## 7. Обновление
 
-Чтобы разрешить мутации без TTY (не рекомендуется), установите `DUB_SSH_ALLOW_NON_TTY_MUTATIONS=true` в `.env`.
+```powershell
+npm uninstall -g dubridge
+npm i -g github:potap1978/dubridge
+```
 
-## Системный промпт
+## 8. Удаление
 
-Файл `prompts/deepseek-system-prompt.md` содержит промпт для DeepSeek. Он автоматически отправляется в чат при старте (если не задан `DUB_SKIP_SYSTEM_PROMPT=true`).
+```powershell
+npm uninstall -g dubridge
+rmdir /s /q C:\DeepSeek
+```
+
+## 9. Диагностика
+
+```powershell
+dubridge --version
+netstat -ano | findstr 9222
+dubridge run -w C:\DeepSeek -p "start" --no-launch
+```
