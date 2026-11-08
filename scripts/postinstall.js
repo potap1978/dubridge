@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { downloadBrowser } from './download-browser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,11 +36,25 @@ if (process.platform === 'win32') {
     fs.copyFileSync(envExample, envTarget);
     console.log(`[dubridge] Создан ${envTarget} из шаблона .env.example`);
   }
-  
+
+  if (process.env.DUB_SKIP_BROWSER_DOWNLOAD !== 'true') {
+    console.log('\n[dubridge] Проверка наличия браузера...');
+    downloadBrowser(path.join(targetDir, 'ungooglium_ds'))
+      .then((res) => {
+        if (!res.skipped) console.log('[dubridge] Браузер успешно установлен.');
+        else console.log('[dubridge] Браузер уже установлен.');
+      })
+      .catch((err) => {
+        console.warn('\n[dubridge] ВНИМАНИЕ: Не удалось автоматически скачать браузер.');
+        console.warn(`[dubridge] Причина: ${err.message}`);
+        console.warn('[dubridge] Скачайте вручную с https://github.com/portapps/ungoogled-chromium-portable/releases');
+        console.warn('[dubridge] И положите ungoogled-chromium-portable.exe в C:\\DeepSeek\\ungooglium_ds\\');
+        console.warn('[dubridge] (Чтобы отключить авто-загрузку при установке: DUB_SKIP_BROWSER_DOWNLOAD=true)\n');
+      });
+  } else {
+    console.log('\n[dubridge] Авто-загрузка браузера отключена (DUB_SKIP_BROWSER_DOWNLOAD=true).');
+  }
+
   console.log('\n[dubridge] Готово!');
-  console.log('[dubridge] Если браузера ещё нет, скачайте его командой:');
-  console.log('            npm run download-browser -g');
-  console.log('[dubridge] Или вручную: https://github.com/portapps/ungoogled-chromium-portable/releases');
-  console.log('[dubridge] Файл ungoogled-chromium-portable.exe положить в C:\\DeepSeek\\ungooglium_ds\\');
   console.log('[dubridge] Запуск: C:\\DeepSeek\\run.bat\n');
 }
