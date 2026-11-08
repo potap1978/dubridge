@@ -112,7 +112,15 @@ export async function sshExec(host: string, command: string, cwd?: string, port:
       rl.close();
       if (ans.toLowerCase() !== "y") throw new Error("COMMAND_DENIED: user denied");
     } else {
-      console.warn(`\n[WARN] SSH mutation without confirmation (non-TTY): ${host}: ${command}`);
+      // non-TTY: по умолчанию ЗАПРЕЩАЕМ мутации. Разрешить можно только явным флагом.
+      if (process.env.DUB_SSH_ALLOW_NON_TTY_MUTATIONS === "true") {
+        console.warn(`\n[WARN] SSH mutation allowed by DUB_SSH_ALLOW_NON_TTY_MUTATIONS: ${host}: ${command}`);
+      } else {
+        throw new Error(
+          "COMMAND_DENIED: mutation requires TTY confirmation. " +
+          "Run via run.bat (TTY), or set DUB_SSH_ALLOW_NON_TTY_MUTATIONS=true (dangerous)."
+        );
+      }
     }
   }
 
