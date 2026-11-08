@@ -16,17 +16,14 @@ node --version   # >= 20
 git --version
 ```
 
-Если `winget` не работает:
-- Node.js: https://nodejs.org
-- Git: https://git-scm.com
-
 ## 2. Установка dubridge
 
 ```powershell
 npm i -g github:potap1978/dubridge
 ```
 
-Автоматически создаётся:
+Автоматически создаётся структура:
+
 ```
 C:\DeepSeek\
   run.bat
@@ -36,30 +33,23 @@ C:\DeepSeek\
   chrome-profile\
 ```
 
-## 3. Подготовка браузера
+## 3. Браузер
 
-Вариант А — автоматически:
+Скачивается **автоматически** во время `npm i -g` в `C:\DeepSeek\ungooglium_ds\`. Ничего делать не нужно.
+
+Если нужно переустановить или скачать вручную:
 
 ```powershell
-winget install 7zip.7zip
 npm run download-browser -g
 ```
 
-Скрипт скачает последнюю версию с GitHub и распакует в `C:\DeepSeek\ungooglium_ds\`.
-
-Вариант Б — вручную:
-
-Скачать `ungoogled-chromium-portable.exe` с https://github.com/portapps/ungoogled-chromium-portable/releases и положить в:
+Или скачать с https://github.com/portapps/ungoogled-chromium-portable/releases и положить:
 
 ```powershell
 C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
 ```
 
-Проверить:
-
-```powershell
-dir C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
-```
+Отключить авто-загрузку (CI/Docker): `$env:DUB_SKIP_BROWSER_DOWNLOAD="true"` перед `npm i`.
 
 ## 4. Настройка .env (опционально)
 
