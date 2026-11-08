@@ -5,7 +5,7 @@
   "type": "module",
   "bin": { "dubridge": "dist/index.js" },
   "main": "dist/index.js",
-  "files": ["dist", "prompts", "README.md", "LICENSE", ".env.example"],
+  "files": ["dist", "prompts", "README.md", "LICENSE", ".env.example", "run.bat"],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",

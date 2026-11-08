@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { z } from "zod";
 import { config } from "./config.js";
@@ -25,10 +26,12 @@ Available tools:
 If no action is needed, reply with normal text. Sandbox root is the workspace directory. Reply in Russian.`;
 
 function loadSystemPrompt(): string {
-  const promptPath = path.resolve("prompts/deepseek-system-prompt.md");
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const promptPath = path.resolve(__dirname, "..", "prompts", "deepseek-system-prompt.md");
   if (fs.existsSync(promptPath)) {
     const content = fs.readFileSync(promptPath, "utf8");
-    const match = content.match(/---\n([\s\S]*?)\n---/);
+    const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
     return match ? match[1].trim() : content;
   }
   return DEFAULT_PROMPT;
