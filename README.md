@@ -54,6 +54,7 @@ dubridge run -w /path/to/repo -p "твой запрос"
 | `cat`, `ls`, `ps`, `df`, `journalctl`, `systemctl status`, `git status`, `docker ps` | ✅ сразу | ✅ сразу |
 | `systemctl restart/stop`, `apt install/remove`, `rm`, `chmod`, `sed -i` | ⚠️ `y/N` | ❌ `COMMAND_DENIED` |
 | `rm -rf /`, `mkfs`, `dd of=/dev/sd*`, fork bomb, `> /etc/passwd`, `chmod -R 777 /`, `shutdown`/`reboot`/`poweroff`/`halt` | ❌ `COMMAND_BLOCKED` | ❌ `COMMAND_BLOCKED` |
+| `ssh_copy` с `dst` в `/etc`, `/boot`, `/usr`, `/var/lib`, `/root`, `/bin`, `/sbin`, `/lib`, `/dev`, `/proc`, `/sys`, `/var/log`, `/var/run` | ❌ `COMMAND_BLOCKED` | ❌ `COMMAND_BLOCKED` |
 
 Чтобы разрешить мутации без TTY (не рекомендуется), установите `DUB_SSH_ALLOW_NON_TTY_MUTATIONS=true` в `.env`.
 

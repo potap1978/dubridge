@@ -145,7 +145,33 @@ export async function sshExec(host: string, command: string, cwd?: string, port:
   }
 }
 
+const FORBIDDEN_WRITE_PATHS = [
+  /^\/etc(?:\/|$)/i,
+  /^\/boot(?:\/|$)/i,
+  /^\/usr(?:\/|$)/i,
+  /^\/var\/lib(?:\/|$)/i,
+  /^\/var\/log(?:\/|$)/i,
+  /^\/root(?:\/|$)/i,
+  /^\/bin(?:\/|$)/i,
+  /^\/sbin(?:\/|$)/i,
+  /^\/lib(?:\/|$)/i,
+  /^\/dev(?:\/|$)/i,
+  /^\/proc(?:\/|$)/i,
+  /^\/sys(?:\/|$)/i,
+  /^\/var\/run(?:\/|$)/i,
+];
+
 export async function sshCopy(host: string, direction: "up" | "down", src: string, dst: string, port: number = 22, auth: AuthConfig = { type: "key" }, overwrite: boolean = false, timeout: number = 300000): Promise<string> {
+  // Блок-лист на запись в системные пути (только для direction=up)
+  if (direction === "up") {
+    const norm = dst.replace(/\\/g, "/");
+    for (const p of FORBIDDEN_WRITE_PATHS) {
+      if (p.test(norm)) {
+        throw new Error(`COMMAND_BLOCKED: destination path '${dst}' is in a system directory (write forbidden)`);
+      }
+    }
+  }
+
   const conn = await getConnection(host, port, auth);
   try {
     return await new Promise((resolve, reject) => {
