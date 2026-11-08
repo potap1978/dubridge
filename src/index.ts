@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { Sandbox } from "./sandbox.js";
 import { runCommand } from "./tools.js";
 import { launchOrConnect, sendPrompt, waitForResponse } from "./cdp.js";
+import { sshProbe, sshExec, sshCopy } from "./ssh.js";
 
 const DEFAULT_PROMPT = `You are dubridge, a local coding agent. Reply ONLY with a tool call in this exact format when you need to act:
 \u0060\u0060\u0060tool_call
@@ -61,9 +62,21 @@ const SearchSchema = z.object({
 });
 const RunCommandSchema = z.object({ command: z.string(), cwd: z.string().optional(), timeout_ms: z.number().optional() });
 
+const AuthSchema = z.object({
+  type: z.enum(["key", "password"]),
+  key: z.string().optional(),
+  passphrase: z.string().optional(),
+  password: z.string().optional(),
+  password_env: z.string().optional(),
+}).optional();
+
+const SshProbeSchema = z.object({ host: z.string(), port: z.number().optional(), auth: AuthSchema });
+const SshExecSchema = z.object({ host: z.string(), command: z.string(), cwd: z.string().optional(), port: z.number().optional(), auth: AuthSchema, timeout_ms: z.number().optional() });
+const SshCopySchema = z.object({ host: z.string(), direction: z.enum(["up", "down"]), src: z.string(), dst: z.string(), port: z.number().optional(), auth: AuthSchema, overwrite: z.boolean().optional(), timeout_ms: z.number().optional() });
+
 const ToolCallSchema = z.object({
   id: z.string(),
-  tool: z.enum(["read_file", "write_file", "edit_file", "list_dir", "search", "run_command"]),
+  tool: z.enum(["read_file", "write_file", "edit_file", "list_dir", "search", "run_command", "ssh_probe", "ssh_exec", "ssh_copy"]),
   args: z.record(z.any())
 });
 
@@ -107,6 +120,21 @@ async function executeCalls(root: string, calls: z.infer<typeof ToolCallSchema>[
         case "run_command": {
           const a = RunCommandSchema.parse(c.args);
           r = await runCommand(a.cwd ?? root, a.command, a.timeout_ms);
+          break;
+        }
+        case "ssh_probe": {
+          const a = SshProbeSchema.parse(c.args);
+          r = await sshProbe(a.host, a.port, a.auth);
+          break;
+        }
+        case "ssh_exec": {
+          const a = SshExecSchema.parse(c.args);
+          r = await sshExec(a.host, a.command, a.cwd, a.port, a.auth, a.timeout_ms);
+          break;
+        }
+        case "ssh_copy": {
+          const a = SshCopySchema.parse(c.args);
+          r = await sshCopy(a.host, a.direction, a.src, a.dst, a.port, a.auth, a.overwrite, a.timeout_ms);
           break;
         }
         default:
