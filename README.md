@@ -1,24 +1,32 @@
 # dubridge
 
-## 1. Требования
+## 1. Установка Node.js и Git
+
+Открыть PowerShell от имени Администратора:
 
 ```powershell
-node --version   # >= 20
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+```
+
+Перезапустить терминал и проверить:
+
+```powershell
+node --version   # должно быть >= 20
 git --version
 ```
 
-Node.js: https://nodejs.org
-Git: https://git-scm.com
-Chrome/Chromium: установить в системе
+Если `winget` не работает, скачать вручную:
+- Node.js: https://nodejs.org
+- Git: https://git-scm.com
 
-## 2. Установка
+## 2. Установка dubridge
 
 ```powershell
 npm i -g github:potap1978/dubridge
 ```
 
-Автоматически создаётся:
-
+Автоматически создаётся структура:
 ```
 C:\DeepSeek\
   run.bat
@@ -28,14 +36,14 @@ C:\DeepSeek\
   chrome-profile\
 ```
 
-## 3. Браузер
+## 3. Подготовка браузера
 
 ```powershell
 copy C:\path\ungoogled-chromium-portable.exe C:\DeepSeek\ungooglium_ds\
 dir C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
 ```
 
-## 4. .env
+## 4. Настройка .env (опционально)
 
 ```powershell
 notepad C:\DeepSeek\.env
