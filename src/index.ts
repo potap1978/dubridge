@@ -173,7 +173,7 @@ program.name("dubridge").description("Local agent bridging DeepSeek web chat to 
 program
   .command("run")
   .description("Start agent loop in workspace")
-  .option("-w, --workspace <path>", "workspace root", process.env.DUB_WORKSPACE_ROOT || ".")
+  .option("-w, --workspace <path>", "workspace root", config.workspaceRoot)
   .option("-p, --prompt <text>", "initial prompt")
   .option("--no-launch", "Connect to already running Chrome on DUB_CDP_PORT")
   .action(async (opts: { workspace: string; prompt?: string; launch?: boolean }) => {

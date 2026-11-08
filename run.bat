@@ -25,6 +25,17 @@ echo [..] using CDP port: %PORT%
 
 set "DUB_CDP_PORT=%PORT%"
 set "DUB_PROMPT_FILE=%TARGET_DIR%prompts\deepseek-system-prompt.md"
+set "WORKSPACE=%TARGET_DIR%Work-dir"
+
+REM --- Read DUB_WORKSPACE_ROOT from .env if exists ---
+if exist "%ENV_FILE%" (
+  for /f "usebackq eol=# tokens=1,* delims==" %%A in ("%ENV_FILE%") do (
+    if /i "%%A"=="DUB_WORKSPACE_ROOT" (
+      if not "%%B"=="" set "WORKSPACE=%%B"
+    )
+  )
+)
+echo [..] using workspace: %WORKSPACE%
 
 REM Check if dubridge is installed
 where dubridge >nul 2>nul
@@ -67,7 +78,7 @@ echo.
 echo [..] starting dubridge...
 cd /d "%TARGET_DIR%"
 
-call dubridge run --no-launch -w . -p "Начинай работу, отправь системный промпт и жди моей команды."
+call dubridge run --no-launch -w "%WORKSPACE%" -p "Начинай работу, отправь системный промпт и жди моей команды."
 
 pause
 exit /b 0

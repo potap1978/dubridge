@@ -16,7 +16,8 @@ if (process.platform === 'win32') {
     targetDir,
     path.join(targetDir, 'ungooglium_ds'),
     path.join(targetDir, 'prompts'),
-    path.join(targetDir, 'chrome-profile')
+    path.join(targetDir, 'chrome-profile'),
+    path.join(targetDir, 'Work-dir')
   ];
   dirs.forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); });
 

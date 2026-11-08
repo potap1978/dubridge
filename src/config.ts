@@ -12,7 +12,7 @@ export const config = {
   chromePath: process.env.DUB_CHROME_PATH || "",
   chromeProfileDir: process.env.DUB_CHROME_PROFILE_DIR || path.join(os.homedir(), ".dubridge", "chrome-profile"),
   
-  workspaceRoot: process.env.DUB_WORKSPACE_ROOT || "",
+  workspaceRoot: process.env.DUB_WORKSPACE_ROOT || (process.platform === "win32" ? "C:\\DeepSeek\\Work-dir" : path.join(os.homedir(), "Work-dir")),
   maxFileBytes: parseInt(process.env.DUB_MAX_FILE_BYTES || "262144", 10),
   maxResultChars: parseInt(process.env.DUB_MAX_RESULT_CHARS || "16384", 10),
   

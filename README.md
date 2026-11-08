@@ -22,34 +22,28 @@ git --version
 npm i -g github:potap1978/dubridge
 ```
 
-Автоматически создаётся структура:
+Автоматически создаётся структура (включая браузер):
 
 ```
 C:\DeepSeek\
   run.bat
   .env
   prompts\deepseek-system-prompt.md
-  ungooglium_ds\
+  ungooglium_ds\ungoogled-chromium-portable.exe
   chrome-profile\
+  Work-dir\              <- сюда кладите свой проект
 ```
 
-## 3. Браузер
+## 3. Рабочая папка
 
-Скачивается **автоматически** во время `npm i -g` в `C:\DeepSeek\ungooglium_ds\`. Ничего делать не нужно.
-
-Если нужно переустановить или скачать вручную:
+По умолчанию агент работает в `C:\DeepSeek\Work-dir`. Положите туда ваш проект или клонируйте репозиторий:
 
 ```powershell
-npm run download-browser -g
+cd C:\DeepSeek\Work-dir
+git clone https://github.com/your/repo .
 ```
 
-Или скачать с https://github.com/portapps/ungoogled-chromium-portable/releases и положить:
-
-```powershell
-C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
-```
-
-Отключить авто-загрузку (CI/Docker): `$env:DUB_SKIP_BROWSER_DOWNLOAD="true"` перед `npm i`.
+Если нужно работать в другой папке — измените `DUB_WORKSPACE_ROOT` в `.env`.
 
 ## 4. Настройка .env (опционально)
 
@@ -59,7 +53,7 @@ notepad C:\DeepSeek\.env
 
 ```
 DUB_CDP_PORT=9222
-DUB_WORKSPACE_ROOT=C:\path\to\repo
+DUB_WORKSPACE_ROOT=C:\DeepSeek\Work-dir
 ```
 
 ## 5. Запуск
@@ -93,5 +87,5 @@ rmdir /s /q C:\DeepSeek
 ```powershell
 dubridge --version
 netstat -ano | findstr 9222
-dubridge run -w C:\DeepSeek -p "start" --no-launch
+dubridge run -w C:\DeepSeek\Work-dir -p "start" --no-launch
 ```
