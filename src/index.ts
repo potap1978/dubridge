@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import path from "node:path";
+import fs from "node:fs";
 import chalk from "chalk";
 import { z } from "zod";
+import { config } from "./config.js";
 import { Sandbox } from "./sandbox.js";
 import { runCommand } from "./tools.js";
-import { launchBrowser, sendPrompt, waitForResponse } from "./cdp.js";
+import { launchOrConnect, sendPrompt, waitForResponse } from "./cdp.js";
 
-const TOOL_PROMPT = `You are dubridge, a local coding agent. Reply ONLY with a tool call in this exact format when you need to act:
-
+const DEFAULT_PROMPT = `You are dubridge, a local coding agent. Reply ONLY with a tool call in this exact format when you need to act:
 \u0060\u0060\u0060tool_call
 {"calls":[{"id":"c1","tool":"read_file","args":{"path":"src/index.ts"}}]}
 \u0060\u0060\u0060
@@ -23,7 +24,16 @@ Available tools:
 
 If no action is needed, reply with normal text. Sandbox root is the workspace directory. Reply in Russian.`;
 
-// Zod схемы для строгой валидации аргументов от нейросети
+function loadSystemPrompt(): string {
+  const promptPath = path.resolve("prompts/deepseek-system-prompt.md");
+  if (fs.existsSync(promptPath)) {
+    const content = fs.readFileSync(promptPath, "utf8");
+    const match = content.match(/---\n([\s\S]*?)\n---/);
+    return match ? match[1].trim() : content;
+  }
+  return DEFAULT_PROMPT;
+}
+
 const ReadFileSchema = z.object({ path: z.string(), offset: z.number().optional(), limit: z.number().optional() });
 const WriteFileSchema = z.object({ path: z.string(), content: z.string(), create_dirs: z.boolean().optional() });
 const EditFileSchema = z.object({ path: z.string(), old_text: z.string(), new_text: z.string(), replace_all: z.boolean().optional() });
@@ -84,7 +94,7 @@ async function executeCalls(root: string, calls: z.infer<typeof ToolCallSchema>[
         }
         case "run_command": {
           const a = RunCommandSchema.parse(c.args);
-          r = await runCommand(a.cwd ?? root, a.command, a.timeout_ms ?? 120000);
+          r = await runCommand(a.cwd ?? root, a.command, a.timeout_ms);
           break;
         }
         default:
@@ -99,7 +109,7 @@ async function executeCalls(root: string, calls: z.infer<typeof ToolCallSchema>[
       }
     }
   }
-  return out.join("\n\n");
+  return out.join("\n\n").slice(0, config.maxResultChars);
 }
 
 function parseCalls(text: string): z.infer<typeof ToolCallSchema>[] | null {
@@ -123,17 +133,26 @@ program.name("dubridge").description("Local agent bridging DeepSeek web chat to 
 program
   .command("run")
   .description("Start agent loop in workspace")
-  .option("-w, --workspace <path>", "workspace root", ".")
+  .option("-w, --workspace <path>", "workspace root", process.env.DUB_WORKSPACE_ROOT || ".")
   .option("-p, --prompt <text>", "initial prompt")
-  .action(async (opts: { workspace: string; prompt?: string }) => {
+  .option("--no-launch", "Connect to already running Chrome on DUB_CDP_PORT")
+  .action(async (opts: { workspace: string; prompt?: string; launch?: boolean }) => {
     const root = path.resolve(opts.workspace);
     console.log(chalk.green(`dubridge workspace: ${root}`));
-    const { browser, page } = await launchBrowser();
+    
+    if (opts.launch === false) {
+      config.launchChrome = false;
+    }
+
+    const { browser, page } = await launchOrConnect();
     console.log(chalk.gray("Chrome ready. Log in to DeepSeek in the opened window, then wait."));
     await new Promise((r) => setTimeout(r, 4000));
+
     const prompt = opts.prompt ?? "Start.";
-    await sendPrompt(page, `${TOOL_PROMPT}\n\n---\n\n${prompt}`);
-    for (let i = 0; i < 50; i++) {
+    const systemPrompt = config.skipSystemPrompt ? prompt : loadSystemPrompt();
+    
+    await sendPrompt(page, `${systemPrompt}\n\n---\n\n${prompt}`);
+    for (let i = 0; i < config.maxIterations; i++) {
       const resp = await waitForResponse(page);
       console.log(chalk.cyan("\n--- model ---\n") + resp);
       const calls = parseCalls(resp);

@@ -1,11 +1,10 @@
 import puppeteer, { Browser, Page } from "puppeteer-core";
-import os from "node:os";
 import fs from "node:fs";
-import path from "node:path";
+import { config } from "./config.js";
 
 export function findChrome(): string {
   const candidates = [
-    process.env.CHROME_PATH,
+    config.chromePath,
     process.platform === "win32" && "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     process.platform === "win32" && "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
     process.platform === "darwin" && "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -13,23 +12,33 @@ export function findChrome(): string {
     process.platform === "linux" && "/usr/bin/chromium-browser",
     process.platform === "linux" && "/usr/bin/chromium",
   ].filter(Boolean) as string[];
-  for (const c of candidates) if (fs.existsSync(c)) return c;
-  throw new Error("Chrome/Chromium not found. Set CHROME_PATH env var.");
+  for (const c of candidates) if (c && fs.existsSync(c)) return c;
+  throw new Error("Chrome/Chromium not found. Set CHROME_PATH or DUB_CHROME_PATH env var.");
 }
 
-export async function launchBrowser(): Promise<{ browser: Browser; page: Page }> {
-  const userDataDir = path.join(os.homedir(), ".dubridge", "chrome-profile");
-  fs.mkdirSync(userDataDir, { recursive: true });
-  const browser = await puppeteer.launch({
-    executablePath: findChrome(),
-    headless: false,
-    userDataDir,
-    defaultViewport: { width: 1280, height: 900 },
-    args: ["--no-first-run", "--no-default-browser-check"],
-  });
+export async function launchOrConnect(): Promise<{ browser: Browser; page: Page }> {
+  let browser: Browser;
+  if (config.launchChrome) {
+    browser = await puppeteer.launch({
+      executablePath: findChrome(),
+      headless: false,
+      userDataDir: config.chromeProfileDir,
+      defaultViewport: { width: 1280, height: 900 },
+      args: ["--no-first-run", "--no-default-browser-check"],
+    });
+  } else {
+    browser = await puppeteer.connect({
+      browserURL: `http://${config.cdpHost}:${config.cdpPort}`,
+      defaultViewport: { width: 1280, height: 900 },
+    });
+  }
+
   const pages = await browser.pages();
-  const page = pages[0] ?? (await browser.newPage());
-  await page.goto("https://chat.deepseek.com/", { waitUntil: "networkidle2" });
+  let page = pages.find(p => p.url().startsWith(config.targetUrl));
+  if (!page) {
+    page = await browser.newPage();
+    await page.goto(config.targetUrl, { waitUntil: "networkidle2" });
+  }
   return { browser, page };
 }
 
