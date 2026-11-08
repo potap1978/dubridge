@@ -36,6 +36,10 @@ if (process.platform === 'win32') {
     console.log(`[dubridge] Создан ${envTarget} из шаблона .env.example`);
   }
   
-  console.log('\n[dubridge] Готово! Не забудьте положить ваш браузер в C:\\DeepSeek\\ungooglium_ds\\');
-  console.log('Запускайте агента через C:\\DeepSeek\\run.bat\n');
+  console.log('\n[dubridge] Готово!');
+  console.log('[dubridge] Если браузера ещё нет, скачайте его командой:');
+  console.log('            npm run download-browser -g');
+  console.log('[dubridge] Или вручную: https://github.com/portapps/ungoogled-chromium-portable/releases');
+  console.log('[dubridge] Файл ungoogled-chromium-portable.exe положить в C:\\DeepSeek\\ungooglium_ds\\');
+  console.log('[dubridge] Запуск: C:\\DeepSeek\\run.bat\n');
 }

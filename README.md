@@ -12,11 +12,11 @@ winget install Git.Git
 Перезапустить терминал и проверить:
 
 ```powershell
-node --version   # должно быть >= 20
+node --version   # >= 20
 git --version
 ```
 
-Если `winget` не работает, скачать вручную:
+Если `winget` не работает:
 - Node.js: https://nodejs.org
 - Git: https://git-scm.com
 
@@ -26,7 +26,7 @@ git --version
 npm i -g github:potap1978/dubridge
 ```
 
-Автоматически создаётся структура:
+Автоматически создаётся:
 ```
 C:\DeepSeek\
   run.bat
@@ -38,8 +38,26 @@ C:\DeepSeek\
 
 ## 3. Подготовка браузера
 
+Вариант А — автоматически:
+
 ```powershell
-copy C:\path\ungoogled-chromium-portable.exe C:\DeepSeek\ungooglium_ds\
+winget install 7zip.7zip
+npm run download-browser -g
+```
+
+Скрипт скачает последнюю версию с GitHub и распакует в `C:\DeepSeek\ungooglium_ds\`.
+
+Вариант Б — вручную:
+
+Скачать `ungoogled-chromium-portable.exe` с https://github.com/portapps/ungoogled-chromium-portable/releases и положить в:
+
+```powershell
+C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
+```
+
+Проверить:
+
+```powershell
 dir C:\DeepSeek\ungooglium_ds\ungoogled-chromium-portable.exe
 ```
 
