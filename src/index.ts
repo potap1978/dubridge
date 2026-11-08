@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import path from "node:path";
 import chalk from "chalk";
+import { z } from "zod";
 import { Sandbox } from "./sandbox.js";
 import { runCommand } from "./tools.js";
 import { launchBrowser, sendPrompt, waitForResponse } from "./cdp.js";
@@ -22,40 +23,98 @@ Available tools:
 
 If no action is needed, reply with normal text. Sandbox root is the workspace directory. Reply in Russian.`;
 
-interface ToolCall { id: string; tool: string; args: Record<string, unknown>; }
+// Zod схемы для строгой валидации аргументов от нейросети
+const ReadFileSchema = z.object({ path: z.string(), offset: z.number().optional(), limit: z.number().optional() });
+const WriteFileSchema = z.object({ path: z.string(), content: z.string(), create_dirs: z.boolean().optional() });
+const EditFileSchema = z.object({ path: z.string(), old_text: z.string(), new_text: z.string(), replace_all: z.boolean().optional() });
+const ListDirSchema = z.object({ path: z.string().optional(), depth: z.number().optional() });
+const SearchSchema = z.object({ 
+  query: z.string(), 
+  path: z.string().optional(), 
+  mode: z.enum(["content", "filename"]).optional(), 
+  glob: z.string().optional(), 
+  context: z.number().optional(), 
+  max_results: z.number().optional(), 
+  case_sensitive: z.boolean().optional() 
+});
+const RunCommandSchema = z.object({ command: z.string(), cwd: z.string().optional(), timeout_ms: z.number().optional() });
 
-async function executeCalls(root: string, calls: ToolCall[]): Promise<string> {
+const ToolCallSchema = z.object({
+  id: z.string(),
+  tool: z.enum(["read_file", "write_file", "edit_file", "list_dir", "search", "run_command"]),
+  args: z.record(z.any())
+});
+
+const ParsedResponseSchema = z.object({
+  calls: z.array(ToolCallSchema)
+});
+
+async function executeCalls(root: string, calls: z.infer<typeof ToolCallSchema>[]): Promise<string> {
   const sb = new Sandbox(root);
   const out: string[] = [];
   for (const c of calls) {
     try {
       let r: string;
       switch (c.tool) {
-        case "read_file": r = await sb.read(String(c.args.path), Number(c.args.offset ?? 1), Number(c.args.limit ?? 2000)); break;
-        case "write_file": await sb.write(String(c.args.path), String(c.args.content)); r = "ok"; break;
-        case "edit_file": r = await sb.edit(String(c.args.path), String(c.args.old_text), String(c.args.new_text), Boolean(c.args.replace_all)); break;
-        case "list_dir": r = await sb.list(String(c.args.path ?? "."), Number(c.args.depth ?? 1)); break;
-        case "search": r = await sb.search(String(c.args.query), String(c.args.path ?? "."), c.args as Record<string, unknown>); break;
-        case "run_command": r = await runCommand(String(c.args.cwd ?? root), String(c.args.command), Number(c.args.timeout_ms ?? 120000)); break;
-        default: r = `UNKNOWN_TOOL: ${c.tool}`;
+        case "read_file": {
+          const a = ReadFileSchema.parse(c.args);
+          r = await sb.read(a.path, a.offset ?? 1, a.limit ?? 2000);
+          break;
+        }
+        case "write_file": {
+          const a = WriteFileSchema.parse(c.args);
+          await sb.write(a.path, a.content);
+          r = "ok";
+          break;
+        }
+        case "edit_file": {
+          const a = EditFileSchema.parse(c.args);
+          r = await sb.edit(a.path, a.old_text, a.new_text, a.replace_all ?? false);
+          break;
+        }
+        case "list_dir": {
+          const a = ListDirSchema.parse(c.args);
+          r = await sb.list(a.path ?? ".", a.depth ?? 1);
+          break;
+        }
+        case "search": {
+          const a = SearchSchema.parse(c.args);
+          r = await sb.search(a.query, a.path ?? ".", a);
+          break;
+        }
+        case "run_command": {
+          const a = RunCommandSchema.parse(c.args);
+          r = await runCommand(a.cwd ?? root, a.command, a.timeout_ms ?? 120000);
+          break;
+        }
+        default:
+          r = `UNKNOWN_TOOL: ${c.tool}`;
       }
       out.push(`[${c.id}] ${c.tool} - OK\n${r}`);
     } catch (e: unknown) {
-      out.push(`[${c.id}] ${c.tool} - ERR ${(e as Error).message}`);
+      if (e instanceof z.ZodError) {
+        out.push(`[${c.id}] ${c.tool} - VALIDATION_ERROR\nInvalid arguments: ${e.errors.map(err => `${err.path.join(".")}: ${err.message}`).join(", ")}`);
+      } else {
+        out.push(`[${c.id}] ${c.tool} - ERR ${(e as Error).message}`);
+      }
     }
   }
   return out.join("\n\n");
 }
 
-function parseCalls(text: string): ToolCall[] | null {
+function parseCalls(text: string): z.infer<typeof ToolCallSchema>[] | null {
   const m = text.match(/\u0060\u0060\u0060tool_call\s*([\s\S]*?)\u0060\u0060\u0060/);
   if (!m) return null;
   try {
     const parsed = JSON.parse(m[1].trim());
-    if (Array.isArray(parsed)) return parsed as ToolCall[];
-    if (parsed && Array.isArray(parsed.calls)) return parsed.calls as ToolCall[];
-    return [parsed as ToolCall];
-  } catch { return null; }
+    const validated = ParsedResponseSchema.parse(parsed);
+    return validated.calls;
+  } catch (e: unknown) {
+    if (e instanceof z.ZodError) {
+      console.error(chalk.red("Zod validation failed:"), e.errors);
+    }
+    return null;
+  }
 }
 
 const program = new Command();
