@@ -16,6 +16,7 @@
     "run.bat"
   ],
   "scripts": {
+    "postinstall": "node dist/setup-cli.js || exit 0",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
