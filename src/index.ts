@@ -159,19 +159,68 @@ async function executeCalls(root: string, calls: z.infer<typeof ToolCallSchema>[
   return out.join("\n\n").slice(0, config.maxResultChars);
 }
 
-function parseCalls(text: string): z.infer<typeof ToolCallSchema>[] | null {
-  const m = text.match(/```tool_call\s*([\s\S]*?)```/);
-  if (!m) return null;
-  try {
-    const parsed = JSON.parse(m[1].trim());
-    const validated = ParsedResponseSchema.parse(parsed);
-    return validated.calls;
-  } catch (e: unknown) {
-    if (e instanceof z.ZodError) {
-      console.error(chalk.red("Zod validation failed:"), e.errors);
+function extractJsonObjects(text: string): string[] {
+  const results: string[] = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === '"') inStr = false;
+      continue;
     }
-    return null;
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      if (depth > 0) {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          results.push(text.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
   }
+  return results;
+}
+
+function parseCalls(text: string): z.infer<typeof ToolCallSchema>[] | null {
+  // 1. Standard markdown fence
+  const m = text.match(/```tool_call\s*([\s\S]*?)```/);
+  if (m) {
+    try {
+      const parsed = JSON.parse(m[1].trim());
+      const validated = ParsedResponseSchema.parse(
+        Array.isArray(parsed) ? { calls: parsed } : parsed
+      );
+      return validated.calls;
+    } catch {}
+  }
+
+  // 2. Extract JSON objects from rendered text (DeepSeek innerText removes backticks)
+  const candidates = extractJsonObjects(text);
+  for (const c of candidates) {
+    try {
+      const parsed = JSON.parse(c);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].tool) {
+        const validated = ParsedResponseSchema.parse({ calls: parsed });
+        return validated.calls;
+      }
+      if (parsed && Array.isArray(parsed.calls)) {
+        const validated = ParsedResponseSchema.parse(parsed);
+        return validated.calls;
+      }
+      if (parsed && parsed.tool && parsed.id) {
+        const validated = ParsedResponseSchema.parse({ calls: [parsed] });
+        return validated.calls;
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 async function processAiMessage(page: CDPPage, root: string, text: string): Promise<boolean> {
