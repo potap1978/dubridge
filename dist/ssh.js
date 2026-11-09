@@ -1,8 +1,20 @@
-import { Client } from "ssh2";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import readline from "node:readline/promises";
+let SSH2_MODULE = null;
+async function loadSsh2() {
+    if (SSH2_MODULE)
+        return SSH2_MODULE;
+    try {
+        SSH2_MODULE = await import("ssh2");
+        return SSH2_MODULE;
+    }
+    catch (e) {
+        throw new Error("TOOL_DISABLED: ssh2 module not available (native build failed during npm install). " +
+            "SSH features are disabled. Reinstall with Visual Studio Build Tools, or use local tools only.");
+    }
+}
 async function getConnection(host, port = 22, auth = { type: "key" }) {
     let user = "";
     let hostname = host;
@@ -46,8 +58,9 @@ async function getConnection(host, port = 22, auth = { type: "key" }) {
             }
         }
     }
+    const { Client: ClientCtor } = await loadSsh2();
     return new Promise((resolve, reject) => {
-        const conn = new Client();
+        const conn = new ClientCtor();
         conn.on("ready", () => resolve(conn)).on("error", (err) => reject(new Error(`SSH_CONN_FAILED: ${err.message}`))).connect(config);
     });
 }
