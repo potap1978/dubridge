@@ -30,7 +30,7 @@ export async function setup() {
             console.warn(`[setup] WARN: source not found: ${src}`);
         }
     };
-    // Copy run.bat with forced CRLF line endings (cmd.exe requires CRLF)
+    // Copy run.bat with forced CRLF (cmd.exe requires it)
     const runBatSrc = path.join(pkgRoot, "run.bat");
     const runBatDst = path.join(targetDir, "run.bat");
     if (fs.existsSync(runBatSrc)) {
@@ -41,6 +41,8 @@ export async function setup() {
     else {
         console.warn(`[setup] WARN: source not found: ${runBatSrc}`);
     }
+    // Copy run.ps1 (all actual logic lives here — PowerShell handles LF fine)
+    copy(path.join(pkgRoot, "run.ps1"), path.join(targetDir, "run.ps1"));
     copy(path.join(pkgRoot, "prompts", "deepseek-system-prompt.md"), path.join(targetDir, "prompts", "deepseek-system-prompt.md"));
     const envExample = path.join(pkgRoot, ".env.example");
     const envTarget = path.join(targetDir, ".env");

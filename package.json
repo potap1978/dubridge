@@ -13,7 +13,8 @@
     "README.md",
     "LICENSE",
     ".env.example",
-    "run.bat"
+    "run.bat",
+    "run.ps1"
   ],
   "scripts": {
     "postinstall": "node dist/setup-cli.js || exit 0",
