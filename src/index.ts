@@ -8,38 +8,44 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { Sandbox } from "./sandbox.js";
 import { runCommand } from "./tools.js";
-import { launchOrConnect, sendPrompt, waitForResponse } from "./cdp.js";
+import { launchOrConnect, sendPrompt, waitForNewAiMessage, CDPPage } from "./cdp.js";
 import { sshProbe, sshExec, sshCopy } from "./ssh.js";
 import { setup } from "./setup.js";
 
-const DEFAULT_PROMPT = `You are dubridge, a local coding agent. Reply ONLY with a tool call in this exact format when you need to act:
-\u0060\u0060\u0060tool_call
-{"calls":[{"id":"c1","tool":"read_file","args":{"path":"src/index.ts"}}]}
-\u0060\u0060\u0060
+const DEFAULT_PROMPT = [
+  "You are dubridge, a local coding agent.",
+  "When you need to use a tool, reply with a tool_call markdown block containing a JSON object like:",
+  '{"calls":[{"id":"c1","tool":"read_file","args":{"path":"src/index.ts"}}]}',
+  "Available tools: read_file, write_file, edit_file, list_dir, search, run_command.",
+  "If no action is needed, reply with plain text.",
+  "Reply in Russian. Sandbox root is the workspace directory.",
+].join("\n");
 
-Available tools:
-- read_file(path, offset?, limit?)
-- write_file(path, content, create_dirs?)
-- edit_file(path, old_text, new_text, replace_all?)
-- list_dir(path, depth?)
-- search(query, path?, mode?, glob?, context?, max_results?)
-- run_command(command, cwd?, timeout_ms?)
-
-If no action is needed, reply with normal text. Sandbox root is the workspace directory. Reply in Russian.`;
-
-function loadSystemPrompt(): string {
+function findPkgRoot(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  
-  // Приоритет: DUB_PROMPT_FILE > внутренний prompts/ > DEFAULT_PROMPT
-  const envPath = process.env.DUB_PROMPT_FILE;
-  if (envPath && fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, "utf8");
-    const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
-    return match ? match[1].trim() : content;
+  let dir = __dirname;
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, "package.json"))) return dir;
+    dir = path.dirname(dir);
   }
-  
-  const promptPath = path.resolve(__dirname, "..", "prompts", "deepseek-system-prompt.md");
+  return __dirname;
+}
+
+function loadSystemPrompt(): string {
+  const pkgRoot = findPkgRoot();
+  const envPath = process.env.DUB_PROMPT_FILE;
+  if (envPath) {
+    const candidates = [path.resolve(envPath), path.resolve(pkgRoot, envPath)];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        const content = fs.readFileSync(c, "utf8");
+        const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
+        return match ? match[1].trim() : content;
+      }
+    }
+  }
+  const promptPath = path.join(pkgRoot, "prompts", "deepseek-system-prompt.md");
   if (fs.existsSync(promptPath)) {
     const content = fs.readFileSync(promptPath, "utf8");
     const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
@@ -52,14 +58,14 @@ const ReadFileSchema = z.object({ path: z.string(), offset: z.number().optional(
 const WriteFileSchema = z.object({ path: z.string(), content: z.string(), create_dirs: z.boolean().optional() });
 const EditFileSchema = z.object({ path: z.string(), old_text: z.string(), new_text: z.string(), replace_all: z.boolean().optional() });
 const ListDirSchema = z.object({ path: z.string().optional(), depth: z.number().optional() });
-const SearchSchema = z.object({ 
-  query: z.string(), 
-  path: z.string().optional(), 
-  mode: z.enum(["content", "filename"]).optional(), 
-  glob: z.string().optional(), 
-  context: z.number().optional(), 
-  max_results: z.number().optional(), 
-  case_sensitive: z.boolean().optional() 
+const SearchSchema = z.object({
+  query: z.string(),
+  path: z.string().optional(),
+  mode: z.enum(["content", "filename"]).optional(),
+  glob: z.string().optional(),
+  context: z.number().optional(),
+  max_results: z.number().optional(),
+  case_sensitive: z.boolean().optional()
 });
 const RunCommandSchema = z.object({ command: z.string(), cwd: z.string().optional(), timeout_ms: z.number().optional() });
 
@@ -154,7 +160,7 @@ async function executeCalls(root: string, calls: z.infer<typeof ToolCallSchema>[
 }
 
 function parseCalls(text: string): z.infer<typeof ToolCallSchema>[] | null {
-  const m = text.match(/\u0060\u0060\u0060tool_call\s*([\s\S]*?)\u0060\u0060\u0060/);
+  const m = text.match(/```tool_call\s*([\s\S]*?)```/);
   if (!m) return null;
   try {
     const parsed = JSON.parse(m[1].trim());
@@ -168,40 +174,63 @@ function parseCalls(text: string): z.infer<typeof ToolCallSchema>[] | null {
   }
 }
 
+async function processAiMessage(page: CDPPage, root: string, text: string): Promise<boolean> {
+  console.log(chalk.cyan("\n--- model ---\n") + text);
+  const calls = parseCalls(text);
+  if (!calls) {
+    console.log(chalk.gray("[dubridge] Agent idle. Write your next message in the browser chat..."));
+    return false;
+  }
+  const result = await executeCalls(root, calls);
+  console.log(chalk.yellow("\n--- tool results ---\n") + result.slice(0, 2000));
+  await sendPrompt(page, "Tool results:\n" + result);
+  return true;
+}
+
 const program = new Command();
 program.name("dubridge").description("Local agent bridging DeepSeek web chat to your repo").version("0.1.0");
 
 program
   .command("run")
-  .description("Start agent loop in workspace")
+  .description("Server mode: listens to DeepSeek chat, executes tools")
   .option("-w, --workspace <path>", "workspace root", config.workspaceRoot)
-  .option("-p, --prompt <text>", "initial prompt")
   .option("--no-launch", "Connect to already running Chrome on DUB_CDP_PORT")
-  .action(async (opts: { workspace: string; prompt?: string; launch?: boolean }) => {
+  .option("--no-prompt", "Do not send system prompt on startup")
+  .action(async (opts: { workspace: string; launch?: boolean; prompt?: boolean }) => {
     const root = path.resolve(opts.workspace);
     console.log(chalk.green(`dubridge workspace: ${root}`));
-    
+
     if (opts.launch === false) {
       config.launchChrome = false;
     }
 
-    const { browser, page } = await launchOrConnect();
-    console.log(chalk.gray("Chrome ready. Log in to DeepSeek in the opened window, then wait."));
+    const { page } = await launchOrConnect();
+    console.log(chalk.gray("Chrome connected. Log in to DeepSeek if needed."));
 
-    const prompt = opts.prompt ?? "Start.";
-    const systemPrompt = config.skipSystemPrompt ? prompt : loadSystemPrompt();
-    
-    await sendPrompt(page, `${systemPrompt}\n\n---\n\n${prompt}`);
-    for (let i = 0; i < config.maxIterations; i++) {
-      const resp = await waitForResponse(page);
-      console.log(chalk.cyan("\n--- model ---\n") + resp);
-      const calls = parseCalls(resp);
-      if (!calls) { console.log(chalk.green("\n[done]")); break; }
-      const result = await executeCalls(root, calls);
-      console.log(chalk.yellow("\n--- tool results ---\n") + result.slice(0, 2000));
-      await sendPrompt(page, "Tool results:\n" + result);
+    if (opts.prompt !== false) {
+      console.log(chalk.gray("Sending system prompt..."));
+      const systemPrompt = loadSystemPrompt();
+      await sendPrompt(page, systemPrompt + "\n\nОтветь: Готов. Жди задачи от меня в этом же чате.");
+      console.log(chalk.gray("System prompt sent. Waiting for reply..."));
+      const firstReply = await waitForNewAiMessage(page, 0, 5 * 60 * 1000);
+      if (firstReply) {
+        console.log(chalk.cyan("\n--- model ---\n") + firstReply.text);
+      }
     }
-    await browser.close();
+
+    console.log(chalk.green("\n[dubridge] Listening. Write tasks in the browser chat.\n"));
+    let baseline = await page.getAiMessageCount();
+    console.log(chalk.gray(`[dubridge] baseline AI messages: ${baseline}`));
+
+    while (true) {
+      const next = await waitForNewAiMessage(page, baseline, 3600 * 1000);
+      if (!next) {
+        console.log(chalk.gray("[dubridge] idle timeout, exiting."));
+        break;
+      }
+      baseline = next.count;
+      await processAiMessage(page, root, next.text);
+    }
   });
 
 program
@@ -216,9 +245,6 @@ program
     }
   });
 
-// DUBRIDGE_BUILD_OK — marker for run.ps1 to detect stale builds
-
-// No arguments → run setup (fallback if postinstall was blocked by npm 11)
 if (process.argv.length <= 2) {
   setup()
     .then(() => process.exit(0))

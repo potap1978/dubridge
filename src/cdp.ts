@@ -82,15 +82,14 @@ export class CDPPage {
   }
 
   async click(selector: string): Promise<void> {
-    const coords = await this.evaluate(`(() => {
+    const ok = await this.evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      if (!el) return false;
+      el.focus();
+      if (typeof el.click === 'function') el.click();
+      return true;
     })()`);
-    if (!coords) throw new Error(`selector not found: ${selector}`);
-    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x: coords.x, y: coords.y, button: "left", clickCount: 1 });
-    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: coords.x, y: coords.y, button: "left", clickCount: 1 });
+    if (!ok) throw new Error(`selector not found: ${selector}`);
   }
 
   async waitForSelector(selector: string, timeoutMs: number): Promise<void> {
@@ -107,6 +106,33 @@ export class CDPPage {
       await new Promise((r) => setTimeout(r, 1000));
     }
     throw new Error(`timeout waiting for selector: ${selector}`);
+  }
+
+  async getAiMessageCount(): Promise<number> {
+    try {
+      return await this.evaluate(`document.querySelectorAll('[class*="ds-markdown"]').length`);
+    } catch { return 0; }
+  }
+
+  async getLastAiMessage(): Promise<string> {
+    try {
+      return await this.evaluate(`(() => {
+        const els = document.querySelectorAll('[class*="ds-markdown"]');
+        return els.length ? els[els.length - 1].innerText : '';
+      })()`);
+    } catch { return ''; }
+  }
+
+  async isInputEmpty(): Promise<boolean> {
+    try {
+      return await this.evaluate(`(() => {
+        const sel = '#chat-input, textarea[placeholder], textarea, [contenteditable="true"]';
+        const el = document.querySelector(sel);
+        if (!el) return true;
+        if (el.tagName === 'TEXTAREA') return el.value.length === 0;
+        return el.innerText.trim().length === 0;
+      })()`);
+    } catch { return true; }
   }
 
   close() { this.ws.close(); }
@@ -182,66 +208,114 @@ export async function launchOrConnect(): Promise<{ browser: CDPBrowser; page: CD
   return { browser: new CDPBrowser(proc), page };
 }
 
-export async function sendPrompt(page: CDPPage, text: string): Promise<void> {
-  const selectors = [
-    '#chat-input',
-    'textarea[placeholder]',
-    'textarea',
-    '[contenteditable="true"]',
-    'div[role="textbox"]',
-  ];
+const INPUT_SELECTORS = [
+  '#chat-input',
+  'textarea[placeholder]',
+  'textarea',
+  '[contenteditable="true"]',
+  'div[role="textbox"]',
+];
 
+async function findInput(page: CDPPage): Promise<string | null> {
+  for (const sel of INPUT_SELECTORS) {
+    try {
+      const visible = await page.evaluate(`(() => {
+        const el = document.querySelector(${JSON.stringify(sel)});
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })()`);
+      if (visible) return sel;
+    } catch {}
+  }
+  return null;
+}
+
+export async function waitForInput(page: CDPPage, timeoutMs = 10 * 60 * 1000): Promise<string> {
   const start = Date.now();
-  const timeout = 10 * 60 * 1000; // 10 minutes
-  let foundSel: string | null = null;
+  let lastLog = 0;
+  while (Date.now() - start < timeoutMs) {
+    const sel = await findInput(page);
+    if (sel) return sel;
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    if (elapsed - lastLog >= 10) {
+      console.log(`[dubridge] Waiting for chat input... (${elapsed}s)`);
+      lastLog = elapsed;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`timeout waiting for input field. Tried: ${INPUT_SELECTORS.join(', ')}`);
+}
 
-  while (Date.now() - start < timeout) {
-    for (const sel of selectors) {
-      try {
-        const visible = await page.evaluate(`(() => {
-          const el = document.querySelector(${JSON.stringify(sel)});
-          if (!el) return false;
-          const rect = el.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0;
-        })()`);
-        if (visible) {
-          foundSel = sel;
-          break;
-        }
-      } catch { /* ignore navigation errors */ }
-    }
-    if (foundSel) break;
-    
-    if (Math.round((Date.now() - start) / 1000) % 10 === 0) {
-      console.log(`[dubridge] Waiting for chat input... (${Math.round((Date.now() - start) / 1000)}s)`);
-    }
-    await new Promise(r => setTimeout(r, 1000));
+export async function sendPrompt(page: CDPPage, text: string): Promise<void> {
+  const sel = await waitForInput(page);
+  
+  // Wait for input to become empty (up to 30s) — avoid appending to user's draft
+  const emptyStart = Date.now();
+  while (Date.now() - emptyStart < 30000) {
+    if (await page.isInputEmpty()) break;
+    await new Promise((r) => setTimeout(r, 500));
   }
 
-  if (!foundSel) throw new Error(`timeout waiting for input field. Tried: ${selectors.join(', ')}`);
-
-  await page.click(foundSel);
+  await page.click(sel);
   await page.insertText(text);
   await page.pressEnter();
 }
 
 export async function waitForResponse(page: CDPPage): Promise<string> {
-  await page.waitForSelector('[class*="ds-markdown"]', 180000);
-  let prev = "";
-  let stable = 0;
-  for (let i = 0; i < 600; i++) {
-    const text = await page.evaluate(`(() => {
-      const els = document.querySelectorAll('[class*="ds-markdown"]');
-      return els.length ? els[els.length - 1].innerText : '';
-    })()`);
-    if (text === prev && text && text.length > 0) {
-      stable++;
-      if (stable >= 3) return text;
-    } else {
-      stable = 0;
-      prev = text || "";
-    }
+  const initialCount = await page.getAiMessageCount();
+  const start = Date.now();
+  const timeout = 10 * 60 * 1000;
+
+  while (Date.now() - start < timeout) {
     await new Promise((r) => setTimeout(r, 500));
+    try {
+      const count = await page.getAiMessageCount();
+      if (count <= initialCount) continue;
+      const text = await page.getLastAiMessage();
+      if (!text) continue;
+
+      // Wait for text stability
+      let stable = 0;
+      let last = text;
+      while (stable < 3) {
+        await new Promise((r) => setTimeout(r, 500));
+        const t = await page.getLastAiMessage();
+        if (t === last && t.length > 0) stable++;
+        else { stable = 0; last = t; }
+      }
+      return last;
+    } catch {}
   }
-  return prev;
+  return '';
+}
+
+/**
+ * Wait until AI message count changes from baseline.
+ * Returns { count, text } when new AI message appears, or null on timeout.
+ */
+export async function waitForNewAiMessage(page: CDPPage, baselineCount: number, timeoutMs = 3600 * 1000): Promise<{ count: number; text: string } | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const count = await page.getAiMessageCount();
+      if (count > baselineCount) {
+        const text = await page.getLastAiMessage();
+        if (!text) continue;
+        // Wait for stability
+        let stable = 0;
+        let last = text;
+        while (stable < 3) {
+          await new Promise((r) => setTimeout(r, 500));
+          const t = await page.getLastAiMessage();
+          if (t === last && t.length > 0) stable++;
+          else { stable = 0; last = t; }
+        }
+        const finalCount = await page.getAiMessageCount();
+        return { count: finalCount, text: last };
+      }
+    } catch {}
+  }
+  return null;
 }

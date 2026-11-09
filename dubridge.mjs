@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=4
+// DUBRIDGE_BUILD=5
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -11934,15 +11934,14 @@ var CDPPage = class {
     await this.send("Input.dispatchKeyEvent", { type: "keyUp", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, key: "Enter", code: "Enter" });
   }
   async click(selector) {
-    const coords = await this.evaluate(`(() => {
+    const ok = await this.evaluate(`(() => {
       const el = document.querySelector(${JSON.stringify(selector)});
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      if (!el) return false;
+      el.focus();
+      if (typeof el.click === 'function') el.click();
+      return true;
     })()`);
-    if (!coords) throw new Error(`selector not found: ${selector}`);
-    await this.send("Input.dispatchMouseEvent", { type: "mousePressed", x: coords.x, y: coords.y, button: "left", clickCount: 1 });
-    await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: coords.x, y: coords.y, button: "left", clickCount: 1 });
+    if (!ok) throw new Error(`selector not found: ${selector}`);
   }
   async waitForSelector(selector, timeoutMs) {
     const start = Date.now();
@@ -11959,6 +11958,36 @@ var CDPPage = class {
       await new Promise((r) => setTimeout(r, 1e3));
     }
     throw new Error(`timeout waiting for selector: ${selector}`);
+  }
+  async getAiMessageCount() {
+    try {
+      return await this.evaluate(`document.querySelectorAll('[class*="ds-markdown"]').length`);
+    } catch {
+      return 0;
+    }
+  }
+  async getLastAiMessage() {
+    try {
+      return await this.evaluate(`(() => {
+        const els = document.querySelectorAll('[class*="ds-markdown"]');
+        return els.length ? els[els.length - 1].innerText : '';
+      })()`);
+    } catch {
+      return "";
+    }
+  }
+  async isInputEmpty() {
+    try {
+      return await this.evaluate(`(() => {
+        const sel = '#chat-input, textarea[placeholder], textarea, [contenteditable="true"]';
+        const el = document.querySelector(sel);
+        if (!el) return true;
+        if (el.tagName === 'TEXTAREA') return el.value.length === 0;
+        return el.innerText.trim().length === 0;
+      })()`);
+    } catch {
+      return true;
+    }
   }
   close() {
     this.ws.close();
@@ -12041,63 +12070,81 @@ async function launchOrConnect() {
   }
   return { browser: new CDPBrowser(proc), page };
 }
-async function sendPrompt(page, text) {
-  const selectors = [
-    "#chat-input",
-    "textarea[placeholder]",
-    "textarea",
-    '[contenteditable="true"]',
-    'div[role="textbox"]'
-  ];
-  const start = Date.now();
-  const timeout = 10 * 60 * 1e3;
-  let foundSel = null;
-  while (Date.now() - start < timeout) {
-    for (const sel of selectors) {
-      try {
-        const visible = await page.evaluate(`(() => {
-          const el = document.querySelector(${JSON.stringify(sel)});
-          if (!el) return false;
-          const rect = el.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0;
-        })()`);
-        if (visible) {
-          foundSel = sel;
-          break;
-        }
-      } catch {
-      }
+var INPUT_SELECTORS = [
+  "#chat-input",
+  "textarea[placeholder]",
+  "textarea",
+  '[contenteditable="true"]',
+  'div[role="textbox"]'
+];
+async function findInput(page) {
+  for (const sel of INPUT_SELECTORS) {
+    try {
+      const visible = await page.evaluate(`(() => {
+        const el = document.querySelector(${JSON.stringify(sel)});
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })()`);
+      if (visible) return sel;
+    } catch {
     }
-    if (foundSel) break;
-    if (Math.round((Date.now() - start) / 1e3) % 10 === 0) {
-      console.log(`[dubridge] Waiting for chat input... (${Math.round((Date.now() - start) / 1e3)}s)`);
+  }
+  return null;
+}
+async function waitForInput(page, timeoutMs = 10 * 60 * 1e3) {
+  const start = Date.now();
+  let lastLog = 0;
+  while (Date.now() - start < timeoutMs) {
+    const sel = await findInput(page);
+    if (sel) return sel;
+    const elapsed = Math.round((Date.now() - start) / 1e3);
+    if (elapsed - lastLog >= 10) {
+      console.log(`[dubridge] Waiting for chat input... (${elapsed}s)`);
+      lastLog = elapsed;
     }
     await new Promise((r) => setTimeout(r, 1e3));
   }
-  if (!foundSel) throw new Error(`timeout waiting for input field. Tried: ${selectors.join(", ")}`);
-  await page.click(foundSel);
+  throw new Error(`timeout waiting for input field. Tried: ${INPUT_SELECTORS.join(", ")}`);
+}
+async function sendPrompt(page, text) {
+  const sel = await waitForInput(page);
+  const emptyStart = Date.now();
+  while (Date.now() - emptyStart < 3e4) {
+    if (await page.isInputEmpty()) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  await page.click(sel);
   await page.insertText(text);
   await page.pressEnter();
 }
-async function waitForResponse(page) {
-  await page.waitForSelector('[class*="ds-markdown"]', 18e4);
-  let prev = "";
-  let stable = 0;
-  for (let i = 0; i < 600; i++) {
-    const text = await page.evaluate(`(() => {
-      const els = document.querySelectorAll('[class*="ds-markdown"]');
-      return els.length ? els[els.length - 1].innerText : '';
-    })()`);
-    if (text === prev && text && text.length > 0) {
-      stable++;
-      if (stable >= 3) return text;
-    } else {
-      stable = 0;
-      prev = text || "";
+async function waitForNewAiMessage(page, baselineCount, timeoutMs = 3600 * 1e3) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 1e3));
+    try {
+      const count = await page.getAiMessageCount();
+      if (count > baselineCount) {
+        const text = await page.getLastAiMessage();
+        if (!text) continue;
+        let stable = 0;
+        let last = text;
+        while (stable < 3) {
+          await new Promise((r) => setTimeout(r, 500));
+          const t = await page.getLastAiMessage();
+          if (t === last && t.length > 0) stable++;
+          else {
+            stable = 0;
+            last = t;
+          }
+        }
+        const finalCount = await page.getAiMessageCount();
+        return { count: finalCount, text: last };
+      }
+    } catch {
     }
-    await new Promise((r) => setTimeout(r, 500));
   }
-  return prev;
+  return null;
 }
 
 // src/ssh.ts
@@ -12509,30 +12556,38 @@ async function setup() {
 }
 
 // src/index.ts
-var DEFAULT_PROMPT = `You are dubridge, a local coding agent. Reply ONLY with a tool call in this exact format when you need to act:
-\`\`\`tool_call
-{"calls":[{"id":"c1","tool":"read_file","args":{"path":"src/index.ts"}}]}
-\`\`\`
-
-Available tools:
-- read_file(path, offset?, limit?)
-- write_file(path, content, create_dirs?)
-- edit_file(path, old_text, new_text, replace_all?)
-- list_dir(path, depth?)
-- search(query, path?, mode?, glob?, context?, max_results?)
-- run_command(command, cwd?, timeout_ms?)
-
-If no action is needed, reply with normal text. Sandbox root is the workspace directory. Reply in Russian.`;
-function loadSystemPrompt() {
+var DEFAULT_PROMPT = [
+  "You are dubridge, a local coding agent.",
+  "When you need to use a tool, reply with a tool_call markdown block containing a JSON object like:",
+  '{"calls":[{"id":"c1","tool":"read_file","args":{"path":"src/index.ts"}}]}',
+  "Available tools: read_file, write_file, edit_file, list_dir, search, run_command.",
+  "If no action is needed, reply with plain text.",
+  "Reply in Russian. Sandbox root is the workspace directory."
+].join("\n");
+function findPkgRoot() {
   const __filename = fileURLToPath2(import.meta.url);
   const __dirname = path6.dirname(__filename);
-  const envPath = process.env.DUB_PROMPT_FILE;
-  if (envPath && fs6.existsSync(envPath)) {
-    const content = fs6.readFileSync(envPath, "utf8");
-    const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
-    return match ? match[1].trim() : content;
+  let dir = __dirname;
+  while (dir !== path6.dirname(dir)) {
+    if (fs6.existsSync(path6.join(dir, "package.json"))) return dir;
+    dir = path6.dirname(dir);
   }
-  const promptPath = path6.resolve(__dirname, "..", "prompts", "deepseek-system-prompt.md");
+  return __dirname;
+}
+function loadSystemPrompt() {
+  const pkgRoot = findPkgRoot();
+  const envPath = process.env.DUB_PROMPT_FILE;
+  if (envPath) {
+    const candidates = [path6.resolve(envPath), path6.resolve(pkgRoot, envPath)];
+    for (const c of candidates) {
+      if (fs6.existsSync(c)) {
+        const content = fs6.readFileSync(c, "utf8");
+        const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
+        return match ? match[1].trim() : content;
+      }
+    }
+  }
+  const promptPath = path6.join(pkgRoot, "prompts", "deepseek-system-prompt.md");
   if (fs6.existsSync(promptPath)) {
     const content = fs6.readFileSync(promptPath, "utf8");
     const match = content.match(/---\s*\n([\s\S]*?)\n\s*---/);
@@ -12642,7 +12697,7 @@ Invalid arguments: ${e.errors.map((err) => `${err.path.join(".")}: ${err.message
   return out.join("\n\n").slice(0, config.maxResultChars);
 }
 function parseCalls(text) {
-  const m = text.match(/\u0060\u0060\u0060tool_call\s*([\s\S]*?)\u0060\u0060\u0060/);
+  const m = text.match(/```tool_call\s*([\s\S]*?)```/);
   if (!m) return null;
   try {
     const parsed = JSON.parse(m[1].trim());
@@ -12655,36 +12710,50 @@ function parseCalls(text) {
     return null;
   }
 }
+async function processAiMessage(page, root, text) {
+  console.log(source_default.cyan("\n--- model ---\n") + text);
+  const calls = parseCalls(text);
+  if (!calls) {
+    console.log(source_default.gray("[dubridge] Agent idle. Write your next message in the browser chat..."));
+    return false;
+  }
+  const result = await executeCalls(root, calls);
+  console.log(source_default.yellow("\n--- tool results ---\n") + result.slice(0, 2e3));
+  await sendPrompt(page, "Tool results:\n" + result);
+  return true;
+}
 var program2 = new Command();
 program2.name("dubridge").description("Local agent bridging DeepSeek web chat to your repo").version("0.1.0");
-program2.command("run").description("Start agent loop in workspace").option("-w, --workspace <path>", "workspace root", config.workspaceRoot).option("-p, --prompt <text>", "initial prompt").option("--no-launch", "Connect to already running Chrome on DUB_CDP_PORT").action(async (opts) => {
+program2.command("run").description("Server mode: listens to DeepSeek chat, executes tools").option("-w, --workspace <path>", "workspace root", config.workspaceRoot).option("--no-launch", "Connect to already running Chrome on DUB_CDP_PORT").option("--no-prompt", "Do not send system prompt on startup").action(async (opts) => {
   const root = path6.resolve(opts.workspace);
   console.log(source_default.green(`dubridge workspace: ${root}`));
   if (opts.launch === false) {
     config.launchChrome = false;
   }
-  const { browser, page } = await launchOrConnect();
-  console.log(source_default.gray("Chrome ready. Log in to DeepSeek in the opened window, then wait."));
-  const prompt = opts.prompt ?? "Start.";
-  const systemPrompt = config.skipSystemPrompt ? prompt : loadSystemPrompt();
-  await sendPrompt(page, `${systemPrompt}
-
----
-
-${prompt}`);
-  for (let i = 0; i < config.maxIterations; i++) {
-    const resp = await waitForResponse(page);
-    console.log(source_default.cyan("\n--- model ---\n") + resp);
-    const calls = parseCalls(resp);
-    if (!calls) {
-      console.log(source_default.green("\n[done]"));
+  const { page } = await launchOrConnect();
+  console.log(source_default.gray("Chrome connected. Log in to DeepSeek if needed."));
+  if (opts.prompt !== false) {
+    console.log(source_default.gray("Sending system prompt..."));
+    const systemPrompt = loadSystemPrompt();
+    await sendPrompt(page, systemPrompt + "\n\n\u041E\u0442\u0432\u0435\u0442\u044C: \u0413\u043E\u0442\u043E\u0432. \u0416\u0434\u0438 \u0437\u0430\u0434\u0430\u0447\u0438 \u043E\u0442 \u043C\u0435\u043D\u044F \u0432 \u044D\u0442\u043E\u043C \u0436\u0435 \u0447\u0430\u0442\u0435.");
+    console.log(source_default.gray("System prompt sent. Waiting for reply..."));
+    const firstReply = await waitForNewAiMessage(page, 0, 5 * 60 * 1e3);
+    if (firstReply) {
+      console.log(source_default.cyan("\n--- model ---\n") + firstReply.text);
+    }
+  }
+  console.log(source_default.green("\n[dubridge] Listening. Write tasks in the browser chat.\n"));
+  let baseline = await page.getAiMessageCount();
+  console.log(source_default.gray(`[dubridge] baseline AI messages: ${baseline}`));
+  while (true) {
+    const next = await waitForNewAiMessage(page, baseline, 3600 * 1e3);
+    if (!next) {
+      console.log(source_default.gray("[dubridge] idle timeout, exiting."));
       break;
     }
-    const result = await executeCalls(root, calls);
-    console.log(source_default.yellow("\n--- tool results ---\n") + result.slice(0, 2e3));
-    await sendPrompt(page, "Tool results:\n" + result);
+    baseline = next.count;
+    await processAiMessage(page, root, next.text);
   }
-  await browser.close();
 });
 program2.command("setup").description("Create C:\\DeepSeek structure and download browser (Windows)").action(async () => {
   try {

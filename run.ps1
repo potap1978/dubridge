@@ -108,7 +108,7 @@ if (-not (Test-Path $LocalMjs)) {
 } else {
     # Check if this is a stale build (missing marker)
     $content = Get-Content $LocalMjs -Raw -ErrorAction SilentlyContinue
-    if ($content -notmatch "DUBRIDGE_BUILD=4") {
+    if ($content -notmatch "DUBRIDGE_BUILD=5") {
         Write-Host "[..] dubridge.mjs is stale, updating..."
         $NeedDownload = $true
     }
@@ -126,13 +126,8 @@ if ($NeedDownload) {
     }
 }
 
-$Task = Read-Host "Введите задачу для агента (Enter для выхода)"
-if ([string]::IsNullOrWhiteSpace($Task)) {
-    Write-Host "[dubridge] empty task, exiting."
-    exit 0
-}
-
-& node $LocalMjs run --no-launch -w $Workspace -p $Task
+Write-Host "[dubridge] server mode: write tasks in the browser chat."
+& node $LocalMjs run --no-launch -w $Workspace
 
 Write-Host ""
 Read-Host "Press Enter to exit"
