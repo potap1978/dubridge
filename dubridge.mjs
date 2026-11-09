@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=6
+// DUBRIDGE_BUILD=7
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -11989,6 +11989,37 @@ var CDPPage = class {
       return true;
     }
   }
+  async injectUI() {
+    try {
+      await this.evaluate(`
+        (function() {
+          if (document.getElementById('dubridge-stats-panel')) return;
+          const p = document.createElement('div');
+          p.id = 'dubridge-stats-panel';
+          p.style.cssText = 'position:fixed;top:20px;right:20px;width:260px;background:rgba(30,30,40,0.95);color:#eee;border:1px solid #444;border-radius:8px;padding:12px;font-family:system-ui,sans-serif;font-size:12px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.5);pointer-events:none;';
+          p.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;color:#4ade80;">dubridge</div><div id="dubridge-stats">\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430...</div>';
+          document.body.appendChild(p);
+        })();
+      `);
+    } catch {
+    }
+  }
+  async updateUI(totalChars, messagesSent, toolRounds, toolCalls) {
+    try {
+      await this.evaluate(`
+        (function() {
+          const el = document.getElementById('dubridge-stats');
+          if (!el) return;
+          el.innerHTML = 
+            '<div>\u0421\u0443\u043C\u043C\u0430\u0440\u043D\u044B\u0439 \u043E\u0431\u044A\u0451\u043C \u2248 ' + ${totalChars}.toLocaleString() + ' \u0441\u0438\u043C\u0432.</div>' +
+            '<div>\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E ' + ${messagesSent} + ' \u0440\u0430\u0443\u043D\u0434(\u043E\u0432)</div>' +
+            '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u043E\u0432 ' + ${toolRounds} + ' \u0440\u0430\u0443\u043D\u0434(\u043E\u0432)</div>' +
+            '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430 ' + ${toolCalls} + ' \u0440\u0430\u0437</div>';
+        })();
+      `);
+    } catch {
+    }
+  }
   close() {
     this.ws.close();
   }
@@ -12787,10 +12818,17 @@ program2.command("run").description("Server mode: listens to DeepSeek chat, exec
   }
   const { page } = await launchOrConnect();
   console.log(source_default.gray("Chrome connected. Log in to DeepSeek if needed."));
+  const stats = { totalChars: 0, messagesSent: 0, toolRounds: 0, toolCalls: 0 };
+  await page.injectUI();
+  await page.updateUI(0, 0, 0, 0);
   if (opts.prompt !== false) {
     console.log(source_default.gray("Sending system prompt..."));
     const systemPrompt = loadSystemPrompt();
-    await sendPrompt(page, systemPrompt + "\n\n\u041E\u0442\u0432\u0435\u0442\u044C: \u0413\u043E\u0442\u043E\u0432. \u0416\u0434\u0438 \u0437\u0430\u0434\u0430\u0447\u0438 \u043E\u0442 \u043C\u0435\u043D\u044F \u0432 \u044D\u0442\u043E\u043C \u0436\u0435 \u0447\u0430\u0442\u0435.");
+    const promptText = systemPrompt + "\n\n\u041E\u0442\u0432\u0435\u0442\u044C: \u0413\u043E\u0442\u043E\u0432. \u0416\u0434\u0438 \u0437\u0430\u0434\u0430\u0447\u0438 \u043E\u0442 \u043C\u0435\u043D\u044F \u0432 \u044D\u0442\u043E\u043C \u0436\u0435 \u0447\u0430\u0442\u0435.";
+    stats.totalChars += promptText.length;
+    stats.messagesSent++;
+    await sendPrompt(page, promptText);
+    await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
     console.log(source_default.gray("System prompt sent. Waiting for reply..."));
     const firstReply = await waitForNewAiMessage(page, 0, 5 * 60 * 1e3);
     if (firstReply) {
@@ -12807,6 +12845,13 @@ program2.command("run").description("Server mode: listens to DeepSeek chat, exec
       break;
     }
     baseline = next.count;
+    const calls = parseCalls(next.text);
+    if (calls) {
+      stats.toolRounds++;
+      stats.toolCalls += calls.length;
+      stats.totalChars += next.text.length;
+      await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
+    }
     await processAiMessage(page, root, next.text);
   }
 });

@@ -30,7 +30,7 @@ const common = {
   logLevel: "info",
   plugins: [tsResolvePlugin],
   banner: {
-    js: "// DUBRIDGE_BUILD=6\nimport { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
+    js: "// DUBRIDGE_BUILD=7\nimport { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
   },
 };
 

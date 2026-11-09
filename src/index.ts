@@ -256,10 +256,19 @@ program
     const { page } = await launchOrConnect();
     console.log(chalk.gray("Chrome connected. Log in to DeepSeek if needed."));
 
+    // Initialize stats
+    const stats = { totalChars: 0, messagesSent: 0, toolRounds: 0, toolCalls: 0 };
+    await page.injectUI();
+    await page.updateUI(0, 0, 0, 0);
+
     if (opts.prompt !== false) {
       console.log(chalk.gray("Sending system prompt..."));
       const systemPrompt = loadSystemPrompt();
-      await sendPrompt(page, systemPrompt + "\n\nОтветь: Готов. Жди задачи от меня в этом же чате.");
+      const promptText = systemPrompt + "\n\nОтветь: Готов. Жди задачи от меня в этом же чате.";
+      stats.totalChars += promptText.length;
+      stats.messagesSent++;
+      await sendPrompt(page, promptText);
+      await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
       console.log(chalk.gray("System prompt sent. Waiting for reply..."));
       const firstReply = await waitForNewAiMessage(page, 0, 5 * 60 * 1000);
       if (firstReply) {
@@ -278,6 +287,13 @@ program
         break;
       }
       baseline = next.count;
+      const calls = parseCalls(next.text);
+      if (calls) {
+        stats.toolRounds++;
+        stats.toolCalls += calls.length;
+        stats.totalChars += next.text.length;
+        await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
+      }
       await processAiMessage(page, root, next.text);
     }
   });
