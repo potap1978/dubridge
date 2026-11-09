@@ -100,12 +100,30 @@ Write-Host "[..] starting dubridge..."
 Set-Location $TargetDir
 
 $LocalMjs = Join-Path $TargetDir "dubridge.mjs"
+$NeedDownload = $false
+
 if (-not (Test-Path $LocalMjs)) {
-    Write-Host "[Error] $LocalMjs not found." -ForegroundColor Red
-    Write-Host "Download it with:"
-    Write-Host "curl.exe -fsSL \"https://raw.githubusercontent.com/potap1978/dubridge/main/dubridge.mjs\" -o \"$LocalMjs\""
-    Read-Host "Press Enter to exit"
-    exit 1
+    Write-Host "[..] dubridge.mjs not found, downloading..."
+    $NeedDownload = $true
+} else {
+    # Check if this is a stale build (missing marker)
+    $content = Get-Content $LocalMjs -Raw -ErrorAction SilentlyContinue
+    if ($content -notmatch "DUBRIDGE_BUILD_OK") {
+        Write-Host "[..] dubridge.mjs is stale, updating..."
+        $NeedDownload = $true
+    }
+}
+
+if ($NeedDownload) {
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/potap1978/dubridge/main/dubridge.mjs" -OutFile $LocalMjs -UseBasicParsing -TimeoutSec 60
+        Write-Host "[OK] dubridge.mjs updated"
+    } catch {
+        Write-Host "[Error] Failed to download dubridge.mjs: $($_.Exception.Message)" -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
 }
 
 & node $LocalMjs run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."

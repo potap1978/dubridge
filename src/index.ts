@@ -217,6 +217,8 @@ program
     }
   });
 
+// DUBRIDGE_BUILD_OK — marker for run.ps1 to detect stale builds
+
 // No arguments → run setup (fallback if postinstall was blocked by npm 11)
 if (process.argv.length <= 2) {
   setup()
