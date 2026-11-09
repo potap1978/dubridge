@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD_OK
+// DUBRIDGE_BUILD=2
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -12035,9 +12035,24 @@ async function launchOrConnect() {
   return { browser: new CDPBrowser(proc), page };
 }
 async function sendPrompt(page, text) {
-  const sel = 'textarea, [contenteditable="true"]';
-  await page.waitForSelector(sel, 2e4);
-  await page.click(sel);
+  const selectors = [
+    "#chat-input",
+    "textarea[placeholder]",
+    "textarea",
+    '[contenteditable="true"]',
+    'div[role="textbox"]'
+  ];
+  let found = false;
+  for (const sel of selectors) {
+    try {
+      await page.waitForSelector(sel, 3e3);
+      await page.click(sel);
+      found = true;
+      break;
+    } catch {
+    }
+  }
+  if (!found) throw new Error(`input field not found. Tried: ${selectors.join(", ")}`);
   await page.insertText(text);
   await page.pressEnter();
 }

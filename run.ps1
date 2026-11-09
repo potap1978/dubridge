@@ -108,7 +108,7 @@ if (-not (Test-Path $LocalMjs)) {
 } else {
     # Check if this is a stale build (missing marker)
     $content = Get-Content $LocalMjs -Raw -ErrorAction SilentlyContinue
-    if ($content -notmatch "DUBRIDGE_BUILD_OK") {
+    if ($content -notmatch "DUBRIDGE_BUILD=2") {
         Write-Host "[..] dubridge.mjs is stale, updating..."
         $NeedDownload = $true
     }

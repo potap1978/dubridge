@@ -177,9 +177,23 @@ export async function launchOrConnect(): Promise<{ browser: CDPBrowser; page: CD
 }
 
 export async function sendPrompt(page: CDPPage, text: string): Promise<void> {
-  const sel = 'textarea, [contenteditable="true"]';
-  await page.waitForSelector(sel, 20000);
-  await page.click(sel);
+  const selectors = [
+    '#chat-input',
+    'textarea[placeholder]',
+    'textarea',
+    '[contenteditable="true"]',
+    'div[role="textbox"]',
+  ];
+  let found = false;
+  for (const sel of selectors) {
+    try {
+      await page.waitForSelector(sel, 3000);
+      await page.click(sel);
+      found = true;
+      break;
+    } catch {}
+  }
+  if (!found) throw new Error(`input field not found. Tried: ${selectors.join(', ')}`);
   await page.insertText(text);
   await page.pressEnter();
 }
