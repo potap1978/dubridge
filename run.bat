@@ -9,6 +9,18 @@ set "CHROME_EXE=%~dp0ungooglium_ds\ungoogled-chromium-portable.exe"
 set "PORT=9222"
 REM ==============================
 
+REM Auto-restore LFS binaries if missing (Chrome, Node)
+if not exist "%CHROME_EXE%" (
+  echo [..] Восстанавливаем LFS-бинарники (Chrome, Node)...  
+  git lfs pull >nul 2>&1
+  if not exist "%CHROME_EXE%" (
+    echo [Error] не удалось восстановить %CHROME_EXE%
+    echo Убедитесь, что установлен git-lfs: git lfs install
+    echo Затем выполните: git lfs pull
+    pause & exit /b 1
+  )
+)
+
 set "PATH=%NODE_DIR%;%PATH%"
 
 where node >nul 2>nul
