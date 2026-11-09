@@ -48,8 +48,15 @@ if not exist "%TARGET%\.env" (
   echo [5/6] .env already exists, skipping
 )
 
+if exist "%TARGET%\ungooglium_ds\ungoogled-chromium-portable.exe" (
+  echo [6/6] Browser already installed, skipping download.
+  goto :done
+)
+
 echo [6/6] Downloading browser (~162 MB)...
 call :download_browser
+
+:done
 
 echo.
 echo ============================================================

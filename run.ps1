@@ -99,7 +99,12 @@ Write-Host ""
 Write-Host "[..] starting dubridge..."
 Set-Location $TargetDir
 
-& dubridge run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."
+$LocalMjs = Join-Path $TargetDir "dubridge.mjs"
+if (Test-Path $LocalMjs) {
+    & node $LocalMjs run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."
+} else {
+    & dubridge run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."
+}
 
 Write-Host ""
 Read-Host "Press Enter to exit"
