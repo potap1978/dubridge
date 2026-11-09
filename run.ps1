@@ -1,16 +1,16 @@
 $ErrorActionPreference = "Continue"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $TargetDir = $PSScriptRoot
 $ProfileDir = Join-Path $TargetDir "chrome-profile"
 
-# Find browser exe (may have been extracted to different location)
 $ChromeExe = $null
 $candidates = @(
     (Join-Path $TargetDir "ungooglium_ds\ungoogled-chromium-portable.exe"),
-    (Join-Path $TargetDir "ungoogled-chromium-portable.exe"),
-    (Join-Path $TargetDir "ungoogled-chromium-portable\ungoogled-chromium-portable.exe")
+    (Join-Path $TargetDir "ungoogled-chromium-portable.exe")
 )
 foreach ($c in $candidates) { if (Test-Path $c) { $ChromeExe = $c; break } }
+
 if (-not $ChromeExe) {
     $found = Get-ChildItem -Path $TargetDir -Filter "*chromium*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($found) {
@@ -18,21 +18,19 @@ if (-not $ChromeExe) {
         if (-not (Test-Path (Split-Path $dst))) { New-Item -ItemType Directory -Path (Split-Path $dst) -Force | Out-Null }
         Copy-Item $found.FullName $dst -Force
         $ChromeExe = $dst
-        Write-Host "[..] found browser at $($found.FullName), copied to $dst"
     }
 }
+
 if (-not $ChromeExe) {
-    Write-Host "[Error] ungoogled-chromium-portable.exe not found in $TargetDir" -ForegroundColor Red
-    Write-Host "Re-run install.bat or download from https://github.com/portapps/ungoogled-chromium-portable/releases"
+    Write-Host "[Error] ungoogled-chromium-portable.exe not found." -ForegroundColor Red
     Read-Host "Press Enter to exit"
     exit 1
 }
-$EnvFile = Join-Path $TargetDir ".env"
-$PromptsFile = Join-Path $TargetDir "prompts\deepseek-system-prompt.md"
-$Port = 9222
 
-# Read DUB_CDP_PORT and DUB_WORKSPACE_ROOT from .env
+$EnvFile = Join-Path $TargetDir ".env"
+$Port = 9222
 $Workspace = Join-Path $TargetDir "Work-dir"
+
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | ForEach-Object {
         if ($_ -match '^\s*DUB_CDP_PORT\s*=\s*(\d+)') { $Port = [int]$Matches[1] }
@@ -40,28 +38,10 @@ if (Test-Path $EnvFile) {
     }
 }
 
-# (removed verbose output to match original run.bat)
-
 $env:DUB_CDP_PORT = $Port
-$env:DUB_PROMPT_FILE = $PromptsFile
+$env:DUB_PROMPT_FILE = Join-Path $TargetDir "prompts\deepseek-system-prompt.md"
 $env:DUB_WORKSPACE_ROOT = $Workspace
 
-# Check dubridge is installed
-if (-not (Get-Command dubridge -ErrorAction SilentlyContinue)) {
-    Write-Host "[Error] dubridge command not found." -ForegroundColor Red
-    Write-Host "Please install: npm i -g github:potap1978/dubridge"
-    Read-Host "Press Enter to exit"
-    exit 1
-}
-
-if (-not (Test-Path $ChromeExe)) {
-    Write-Host "[Error] not found: $ChromeExe" -ForegroundColor Red
-    Write-Host "Run 'dubridge setup' to download the browser."
-    Read-Host "Press Enter to exit"
-    exit 1
-}
-
-# Check if port already open
 $portOpen = $false
 try {
     $null = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/json/version" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
@@ -105,9 +85,8 @@ if (-not (Test-Path $LocalMjs)) {
     Write-Host "[..] dubridge.mjs not found, downloading..."
     $NeedDownload = $true
 } else {
-    # Check if this is a stale build (missing marker)
     $content = Get-Content $LocalMjs -Raw -ErrorAction SilentlyContinue
-    if ($content -notmatch "DUBRIDGE_BUILD=10") {
+    if ($content -notmatch "DUBRIDGE_BUILD=11") {
         Write-Host "[..] dubridge.mjs is stale, updating..."
         $NeedDownload = $true
     }

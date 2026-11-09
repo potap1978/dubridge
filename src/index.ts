@@ -261,12 +261,6 @@ program
     const stats = { totalChars: 0, messagesSent: 0, toolRounds: 0, toolCalls: 0 };
     await page.injectUI();
     await page.updateUI(0, 0, 0, 0);
-    
-    // Keep banner alive (React may remove it on re-render)
-    const uiInterval = setInterval(() => {
-      page.injectUI().catch(() => {});
-    }, 3000);
-    process.on("exit", () => clearInterval(uiInterval));
 
     if (opts.prompt !== false) {
       console.log(chalk.gray("Sending system prompt..."));
