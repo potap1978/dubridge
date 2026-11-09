@@ -10,16 +10,12 @@
   "files": [
     "dist",
     "prompts",
-    "scripts",
     "README.md",
     "LICENSE",
     ".env.example",
-    "run.bat",
-    "setup.bat"
+    "run.bat"
   ],
   "scripts": {
-    "postinstall": "node scripts/postinstall.js",
-    "download-browser": "node scripts/download-browser.js",
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",

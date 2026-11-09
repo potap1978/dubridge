@@ -10,6 +10,7 @@ import { Sandbox } from "./sandbox.js";
 import { runCommand } from "./tools.js";
 import { launchOrConnect, sendPrompt, waitForResponse } from "./cdp.js";
 import { sshProbe, sshExec, sshCopy } from "./ssh.js";
+import { setup } from "./setup.js";
 const DEFAULT_PROMPT = `You are dubridge, a local coding agent. Reply ONLY with a tool call in this exact format when you need to act:
 \u0060\u0060\u0060tool_call
 {"calls":[{"id":"c1","tool":"read_file","args":{"path":"src/index.ts"}}]}
@@ -192,6 +193,18 @@ program
         await sendPrompt(page, "Tool results:\n" + result);
     }
     await browser.close();
+});
+program
+    .command("setup")
+    .description("Create C:\\DeepSeek structure and download browser (Windows)")
+    .action(async () => {
+    try {
+        await setup();
+    }
+    catch (e) {
+        console.error(chalk.red("Setup failed:"), e);
+        process.exit(1);
+    }
 });
 program.parseAsync(process.argv).catch((e) => { console.error(e); process.exit(1); });
 //# sourceMappingURL=index.js.map
