@@ -8,7 +8,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { Sandbox } from "./sandbox.js";
 import { runCommand } from "./tools.js";
-import { launchOrConnect, sendPrompt, waitForNewAiMessage, CDPPage } from "./cdp.js";
+import { launchOrConnect, sendPrompt, waitForNewAiMessage, waitForApiResponse, CDPPage } from "./cdp.js";
 import { sshProbe, sshExec, sshCopy } from "./ssh.js";
 import { setup } from "./setup.js";
 
@@ -254,6 +254,7 @@ program
     }
 
     const { page } = await launchOrConnect();
+    await page.enableNetwork();
     console.log(chalk.gray("Chrome connected. Log in to DeepSeek if needed."));
 
     // Initialize stats
@@ -265,36 +266,54 @@ program
       console.log(chalk.gray("Sending system prompt..."));
       const systemPrompt = loadSystemPrompt();
       const promptText = systemPrompt + "\n\nОтветь: Готов. Жди задачи от меня в этом же чате.";
+      
+      const respPromise = waitForApiResponse(page, 5 * 60 * 1000);
+      await sendPrompt(page, promptText);
+      
       stats.totalChars += promptText.length;
       stats.messagesSent++;
-      await sendPrompt(page, promptText);
       await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
       console.log(chalk.gray("System prompt sent. Waiting for reply..."));
-      const firstReply = await waitForNewAiMessage(page, 0, 5 * 60 * 1000);
-      if (firstReply) {
-        console.log(chalk.cyan("\n--- model ---\n") + firstReply.text);
+      
+      const firstReplyText = await respPromise;
+      if (firstReplyText) {
+        console.log(chalk.cyan("\n--- model ---\n") + firstReplyText);
+      } else {
+        console.log(chalk.yellow("[dubridge] Timeout waiting for system prompt reply."));
       }
     }
 
     console.log(chalk.green("\n[dubridge] Listening. Write tasks in the browser chat.\n"));
-    let baseline = await page.getAiMessageCount();
-    console.log(chalk.gray(`[dubridge] baseline AI messages: ${baseline}`));
 
     while (true) {
-      const next = await waitForNewAiMessage(page, baseline, 3600 * 1000);
-      if (!next) {
+      const text = await waitForApiResponse(page, 3600 * 1000);
+      if (text === null) {
         console.log(chalk.gray("[dubridge] idle timeout, exiting."));
         break;
       }
-      baseline = next.count;
-      const calls = parseCalls(next.text);
+
+      console.log(chalk.cyan("\n--- model ---\n") + text);
+      stats.totalChars += text.length;
+      const calls = parseCalls(text);
+      
       if (calls) {
         stats.toolRounds++;
         stats.toolCalls += calls.length;
-        stats.totalChars += next.text.length;
+        await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
+
+        const result = await executeCalls(root, calls);
+        console.log(chalk.yellow("\n--- tool results ---\n") + result.slice(0, 2000));
+        
+        const resultText = "Tool results:\n" + result;
+        stats.messagesSent++;
+        stats.totalChars += resultText.length;
+        await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
+        
+        await sendPrompt(page, resultText);
+      } else {
+        console.log(chalk.gray("[dubridge] Agent idle. Write your next message in the browser chat..."));
         await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
       }
-      await processAiMessage(page, root, next.text);
     }
   });
 

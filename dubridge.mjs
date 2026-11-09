@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=8
+// DUBRIDGE_BUILD=9
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -11885,6 +11885,7 @@ var CDPPage = class {
   ws;
   msgId = 0;
   pending = /* @__PURE__ */ new Map();
+  listeners = /* @__PURE__ */ new Map();
   constructor(ws) {
     this.ws = ws;
     this.ws.on("message", (data) => this.onMessage(data.toString()));
@@ -11901,6 +11902,9 @@ var CDPPage = class {
       this.pending.delete(msg.id);
       if (msg.error) p.reject(new Error(msg.error.message));
       else p.resolve(msg.result);
+    }
+    if (msg.method && this.listeners.has(msg.method)) {
+      for (const h of this.listeners.get(msg.method)) h(msg.params);
     }
   }
   send(method, params = {}) {
@@ -11958,6 +11962,22 @@ var CDPPage = class {
       await new Promise((r) => setTimeout(r, 1e3));
     }
     throw new Error(`timeout waiting for selector: ${selector}`);
+  }
+  on(event, handler) {
+    if (!this.listeners.has(event)) this.listeners.set(event, []);
+    this.listeners.get(event).push(handler);
+  }
+  off(event, handler) {
+    const list = this.listeners.get(event);
+    if (!list) return;
+    const idx = list.indexOf(handler);
+    if (idx >= 0) list.splice(idx, 1);
+  }
+  async enableNetwork() {
+    await this.send("Network.enable");
+  }
+  async getResponseBody(requestId) {
+    return await this.send("Network.getResponseBody", { requestId });
   }
   async getAiMessageCount() {
     try {
@@ -12149,33 +12169,62 @@ async function sendPrompt(page, text) {
   await page.insertText(text);
   await page.pressEnter();
 }
-async function waitForNewAiMessage(page, baselineCount, timeoutMs = 3600 * 1e3) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((r) => setTimeout(r, 1e3));
-    try {
-      const count = await page.getAiMessageCount();
-      if (count > baselineCount) {
-        const text = await page.getLastAiMessage();
-        if (!text) continue;
-        let stable = 0;
-        let last = text;
-        while (stable < 3) {
-          await new Promise((r) => setTimeout(r, 500));
-          const t = await page.getLastAiMessage();
-          if (t === last && t.length > 0) stable++;
-          else {
-            stable = 0;
-            last = t;
-          }
+async function waitForApiResponse(page, timeoutMs = 3600 * 1e3) {
+  return new Promise((resolve) => {
+    let reqId = null;
+    const timer = setTimeout(() => {
+      page.off("Network.responseReceived", onResp);
+      page.off("Network.loadingFinished", onFinish);
+      resolve(null);
+    }, timeoutMs);
+    const onResp = (params) => {
+      if (params.response && params.response.url.includes("/api/v0/chat/completion")) {
+        reqId = params.requestId;
+      }
+    };
+    const onFinish = async (params) => {
+      if (reqId && params.requestId === reqId) {
+        clearTimeout(timer);
+        page.off("Network.responseReceived", onResp);
+        page.off("Network.loadingFinished", onFinish);
+        try {
+          const bodyRes = await page.getResponseBody(reqId);
+          const raw = bodyRes.base64Encoded ? Buffer.from(bodyRes.body, "base64").toString("utf8") : bodyRes.body;
+          resolve(parseSse(raw));
+        } catch (e) {
+          console.error("[dubridge] Failed to get response body:", e);
+          resolve(null);
         }
-        const finalCount = await page.getAiMessageCount();
-        return { count: finalCount, text: last };
+      }
+    };
+    page.on("Network.responseReceived", onResp);
+    page.on("Network.loadingFinished", onFinish);
+  });
+}
+function parseSse(raw) {
+  const lines = raw.split("\n");
+  let finalText = "";
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const jsonStr = trimmed.slice(5).trim();
+    if (!jsonStr || jsonStr === "[DONE]") continue;
+    try {
+      const obj = JSON.parse(jsonStr);
+      const fragments = obj?.v?.response?.fragments;
+      if (Array.isArray(fragments) && fragments.length > 0) {
+        const lastFrag = fragments[fragments.length - 1];
+        if (typeof lastFrag?.content === "string") {
+          finalText = lastFrag.content;
+        }
+      }
+      if (typeof obj?.v === "string") {
+        finalText += obj.v;
       }
     } catch {
     }
   }
-  return null;
+  return finalText;
 }
 
 // src/ssh.ts
@@ -12796,18 +12845,6 @@ function parseCalls(text) {
   }
   return null;
 }
-async function processAiMessage(page, root, text) {
-  console.log(source_default.cyan("\n--- model ---\n") + text);
-  const calls = parseCalls(text);
-  if (!calls) {
-    console.log(source_default.gray("[dubridge] Agent idle. Write your next message in the browser chat..."));
-    return false;
-  }
-  const result = await executeCalls(root, calls);
-  console.log(source_default.yellow("\n--- tool results ---\n") + result.slice(0, 2e3));
-  await sendPrompt(page, "Tool results:\n" + result);
-  return true;
-}
 var program2 = new Command();
 program2.name("dubridge").description("Local agent bridging DeepSeek web chat to your repo").version("0.1.0");
 program2.command("run").description("Server mode: listens to DeepSeek chat, executes tools").option("-w, --workspace <path>", "workspace root", config.workspaceRoot).option("--no-launch", "Connect to already running Chrome on DUB_CDP_PORT").option("--no-prompt", "Do not send system prompt on startup").action(async (opts) => {
@@ -12817,6 +12854,7 @@ program2.command("run").description("Server mode: listens to DeepSeek chat, exec
     config.launchChrome = false;
   }
   const { page } = await launchOrConnect();
+  await page.enableNetwork();
   console.log(source_default.gray("Chrome connected. Log in to DeepSeek if needed."));
   const stats = { totalChars: 0, messagesSent: 0, toolRounds: 0, toolCalls: 0 };
   await page.injectUI();
@@ -12825,34 +12863,44 @@ program2.command("run").description("Server mode: listens to DeepSeek chat, exec
     console.log(source_default.gray("Sending system prompt..."));
     const systemPrompt = loadSystemPrompt();
     const promptText = systemPrompt + "\n\n\u041E\u0442\u0432\u0435\u0442\u044C: \u0413\u043E\u0442\u043E\u0432. \u0416\u0434\u0438 \u0437\u0430\u0434\u0430\u0447\u0438 \u043E\u0442 \u043C\u0435\u043D\u044F \u0432 \u044D\u0442\u043E\u043C \u0436\u0435 \u0447\u0430\u0442\u0435.";
+    const respPromise = waitForApiResponse(page, 5 * 60 * 1e3);
+    await sendPrompt(page, promptText);
     stats.totalChars += promptText.length;
     stats.messagesSent++;
-    await sendPrompt(page, promptText);
     await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
     console.log(source_default.gray("System prompt sent. Waiting for reply..."));
-    const firstReply = await waitForNewAiMessage(page, 0, 5 * 60 * 1e3);
-    if (firstReply) {
-      console.log(source_default.cyan("\n--- model ---\n") + firstReply.text);
+    const firstReplyText = await respPromise;
+    if (firstReplyText) {
+      console.log(source_default.cyan("\n--- model ---\n") + firstReplyText);
+    } else {
+      console.log(source_default.yellow("[dubridge] Timeout waiting for system prompt reply."));
     }
   }
   console.log(source_default.green("\n[dubridge] Listening. Write tasks in the browser chat.\n"));
-  let baseline = await page.getAiMessageCount();
-  console.log(source_default.gray(`[dubridge] baseline AI messages: ${baseline}`));
   while (true) {
-    const next = await waitForNewAiMessage(page, baseline, 3600 * 1e3);
-    if (!next) {
+    const text = await waitForApiResponse(page, 3600 * 1e3);
+    if (text === null) {
       console.log(source_default.gray("[dubridge] idle timeout, exiting."));
       break;
     }
-    baseline = next.count;
-    const calls = parseCalls(next.text);
+    console.log(source_default.cyan("\n--- model ---\n") + text);
+    stats.totalChars += text.length;
+    const calls = parseCalls(text);
     if (calls) {
       stats.toolRounds++;
       stats.toolCalls += calls.length;
-      stats.totalChars += next.text.length;
+      await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
+      const result = await executeCalls(root, calls);
+      console.log(source_default.yellow("\n--- tool results ---\n") + result.slice(0, 2e3));
+      const resultText = "Tool results:\n" + result;
+      stats.messagesSent++;
+      stats.totalChars += resultText.length;
+      await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
+      await sendPrompt(page, resultText);
+    } else {
+      console.log(source_default.gray("[dubridge] Agent idle. Write your next message in the browser chat..."));
       await page.updateUI(stats.totalChars, stats.messagesSent, stats.toolRounds, stats.toolCalls);
     }
-    await processAiMessage(page, root, next.text);
   }
 });
 program2.command("setup").description("Create C:\\DeepSeek structure and download browser (Windows)").action(async () => {

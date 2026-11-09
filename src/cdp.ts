@@ -30,6 +30,7 @@ export class CDPPage {
   private ws: WebSocket;
   private msgId = 0;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
+  private listeners = new Map<string, ((params: any) => void)[]>();
 
   constructor(ws: WebSocket) {
     this.ws = ws;
@@ -44,6 +45,9 @@ export class CDPPage {
       this.pending.delete(msg.id);
       if (msg.error) p.reject(new Error(msg.error.message));
       else p.resolve(msg.result);
+    }
+    if (msg.method && this.listeners.has(msg.method)) {
+      for (const h of this.listeners.get(msg.method)!) h(msg.params);
     }
   }
 
@@ -106,6 +110,26 @@ export class CDPPage {
       await new Promise((r) => setTimeout(r, 1000));
     }
     throw new Error(`timeout waiting for selector: ${selector}`);
+  }
+
+  on(event: string, handler: (params: any) => void) {
+    if (!this.listeners.has(event)) this.listeners.set(event, []);
+    this.listeners.get(event)!.push(handler);
+  }
+
+  off(event: string, handler: (params: any) => void) {
+    const list = this.listeners.get(event);
+    if (!list) return;
+    const idx = list.indexOf(handler);
+    if (idx >= 0) list.splice(idx, 1);
+  }
+
+  async enableNetwork(): Promise<void> {
+    await this.send("Network.enable");
+  }
+
+  async getResponseBody(requestId: string): Promise<{ body: string; base64Encoded: boolean }> {
+    return await this.send("Network.getResponseBody", { requestId });
   }
 
   async getAiMessageCount(): Promise<number> {
@@ -319,6 +343,72 @@ export async function waitForResponse(page: CDPPage): Promise<string> {
     } catch {}
   }
   return '';
+}
+
+/**
+ * Wait for the DeepSeek API response (SSE) and extract the text.
+ */
+export async function waitForApiResponse(page: CDPPage, timeoutMs = 3600 * 1000): Promise<string | null> {
+  return new Promise((resolve) => {
+    let reqId: string | null = null;
+    const timer = setTimeout(() => {
+      page.off("Network.responseReceived", onResp);
+      page.off("Network.loadingFinished", onFinish);
+      resolve(null);
+    }, timeoutMs);
+
+    const onResp = (params: any) => {
+      if (params.response && params.response.url.includes("/api/v0/chat/completion")) {
+        reqId = params.requestId;
+      }
+    };
+
+    const onFinish = async (params: any) => {
+      if (reqId && params.requestId === reqId) {
+        clearTimeout(timer);
+        page.off("Network.responseReceived", onResp);
+        page.off("Network.loadingFinished", onFinish);
+        try {
+          const bodyRes = await page.getResponseBody(reqId);
+          const raw = bodyRes.base64Encoded ? Buffer.from(bodyRes.body, "base64").toString("utf8") : bodyRes.body;
+          resolve(parseSse(raw));
+        } catch (e) {
+          console.error("[dubridge] Failed to get response body:", e);
+          resolve(null);
+        }
+      }
+    };
+
+    page.on("Network.responseReceived", onResp);
+    page.on("Network.loadingFinished", onFinish);
+  });
+}
+
+function parseSse(raw: string): string {
+  const lines = raw.split("\n");
+  let finalText = "";
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const jsonStr = trimmed.slice(5).trim();
+    if (!jsonStr || jsonStr === "[DONE]") continue;
+    try {
+      const obj = JSON.parse(jsonStr);
+      // DeepSeek typical path: obj.v.response.fragments[-1].content
+      const fragments = obj?.v?.response?.fragments;
+      if (Array.isArray(fragments) && fragments.length > 0) {
+        const lastFrag = fragments[fragments.length - 1];
+        if (typeof lastFrag?.content === "string") {
+          finalText = lastFrag.content;
+        }
+      }
+      // Sometimes it's in obj.v (string)
+      if (typeof obj?.v === "string") {
+        finalText += obj.v;
+      }
+    } catch {}
+  }
+  return finalText;
 }
 
 /**
