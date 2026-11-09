@@ -11,7 +11,18 @@ export async function setup(): Promise<void> {
 
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  const pkgRoot = path.resolve(__dirname, "..");
+
+  // Walk up from __dirname to find the package root (package.json).
+  // Works whether setup.js is in dist/, at pkg root, or anywhere.
+  let pkgRoot = __dirname;
+  while (pkgRoot !== path.dirname(pkgRoot)) {
+    if (fs.existsSync(path.join(pkgRoot, "package.json"))) break;
+    pkgRoot = path.dirname(pkgRoot);
+  }
+  if (!fs.existsSync(path.join(pkgRoot, "package.json"))) {
+    throw new Error(`Cannot locate package root (no package.json found above ${__dirname})`);
+  }
+
   const targetDir = "C:\\DeepSeek";
 
   console.log("[setup] Creating structure in", targetDir);

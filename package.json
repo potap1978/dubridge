@@ -4,20 +4,21 @@
   "description": "Turn chat.deepseek.com web session into a local coding agent (CDP, sandboxed tools)",
   "type": "module",
   "bin": {
-    "dubridge": "dist/index.js"
+    "dubridge": "bin/dubridge.js"
   },
-  "main": "dist/index.js",
+  "main": "bin/dubridge.js",
   "files": [
-    "dist",
+    "bin",
     "prompts",
     "README.md",
     "LICENSE",
     ".env.example",
     "run.bat",
-    "run.ps1"
+    "run.ps1",
+    "postinstall.ps1"
   ],
   "scripts": {
-    "postinstall": "node dist/setup-cli.js || exit 0",
+    "postinstall": "powershell -ExecutionPolicy Bypass -NoProfile -File postinstall.ps1 || exit 0",
     "build": "node scripts/build.mjs",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
