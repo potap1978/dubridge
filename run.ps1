@@ -100,11 +100,15 @@ Write-Host "[..] starting dubridge..."
 Set-Location $TargetDir
 
 $LocalMjs = Join-Path $TargetDir "dubridge.mjs"
-if (Test-Path $LocalMjs) {
-    & node $LocalMjs run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."
-} else {
-    & dubridge run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."
+if (-not (Test-Path $LocalMjs)) {
+    Write-Host "[Error] $LocalMjs not found." -ForegroundColor Red
+    Write-Host "Download it with:"
+    Write-Host "curl.exe -fsSL \"https://raw.githubusercontent.com/potap1978/dubridge/main/dubridge.mjs\" -o \"$LocalMjs\""
+    Read-Host "Press Enter to exit"
+    exit 1
 }
+
+& node $LocalMjs run --no-launch -w $Workspace -p "Начинай работу, отправь системный промпт и жди моей команды."
 
 Write-Host ""
 Read-Host "Press Enter to exit"
