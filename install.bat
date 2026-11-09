@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal
 
 REM ============================================================
-REM dubridge standalone installer (no npm required)
+REM dubridge standalone installer
 REM ============================================================
 
 set "TARGET=C:\DeepSeek"
@@ -23,25 +23,33 @@ if errorlevel 1 (
   pause & exit /b 1
 )
 
+where curl >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] curl not found. Windows 10/11 should have it.
+  pause & exit /b 1
+)
+
 echo [3/6] Downloading dubridge.mjs...
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest -Uri '%REPO%/dubridge.mjs' -OutFile '%TARGET%\dubridge.mjs' -UseBasicParsing"
+curl -fsSL "%REPO%/dubridge.mjs" -o "%TARGET%\dubridge.mjs"
 if errorlevel 1 (
   echo [ERROR] Failed to download dubridge.mjs
   pause & exit /b 1
 )
 
 echo [4/6] Downloading run scripts and prompt...
-powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest -Uri '%REPO%/run.bat' -OutFile '%TARGET%\run.bat' -UseBasicParsing; Invoke-WebRequest -Uri '%REPO%/run.ps1' -OutFile '%TARGET%\run.ps1' -UseBasicParsing; Invoke-WebRequest -Uri '%REPO%/prompts/deepseek-system-prompt.md' -OutFile '%TARGET%\prompts\deepseek-system-prompt.md' -UseBasicParsing"
+curl -fsSL "%REPO%/run.bat" -o "%TARGET%\run.bat"
+curl -fsSL "%REPO%/run.ps1" -o "%TARGET%\run.ps1"
+curl -fsSL "%REPO%/prompts/deepseek-system-prompt.md" -o "%TARGET%\prompts\deepseek-system-prompt.md"
 
 if not exist "%TARGET%\.env" (
   echo [5/6] Creating .env...
-  powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest -Uri '%REPO%/.env.example' -OutFile '%TARGET%\.env' -UseBasicParsing"
+  curl -fsSL "%REPO%/.env.example" -o "%TARGET%\.env"
 ) else (
   echo [5/6] .env already exists, skipping
 )
 
 echo [6/6] Downloading browser (~162 MB)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Continue'; $api='https://api.github.com/repos/portapps/ungoogled-chromium-portable/releases/latest'; $h=@{'User-Agent'='dubridge'}; $r=Invoke-RestMethod -Uri $api -Headers $h; $a=$r.assets | Where-Object {$_.name -like '*win64*.7z'} | Select-Object -First 1; $tmp=Join-Path $env:TEMP 'dubridge_browser.7z'; $dst='C:\DeepSeek\ungooglium_ds'; Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp; $z=Get-Command 7z -ErrorAction SilentlyContinue; if (-not $z) { $z=Get-Command 'C:\Program Files\7-Zip\7z.exe' -ErrorAction SilentlyContinue }; if ($z) { & $z.Source x $tmp \"-o$dst\" -y } else { Write-Host '[WARN] 7-Zip not found. Download manually: https://github.com/portapps/ungoogled-chromium-portable/releases'; Write-Host \"Saved archive: $tmp\" }; $exe=Get-ChildItem -Path $dst -Filter '*chromium*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1; if ($exe) { $target=Join-Path $dst 'ungoogled-chromium-portable.exe'; if ($exe.FullName -ne $target) { Copy-Item $exe.FullName $target -Force }; Write-Host \"[OK] browser: $target\" } else { Write-Host '[WARN] browser exe not found after extraction' }; Remove-Item $tmp -ErrorAction SilentlyContinue"
+call :download_browser
 
 echo.
 echo ============================================================
@@ -50,3 +58,63 @@ echo.
 echo  Run: %TARGET%\run.bat
 echo ============================================================
 pause
+endlocal
+exit /b 0
+
+:download_browser
+set "BROWSER_URL=https://api.github.com/repos/portapps/ungoogled-chromium-portable/releases/latest"
+set "API_TMP=%TEMP%\dubridge_api.json"
+set "ARCHIVE=%TEMP%\dubridge_browser.7z"
+set "DST=%TARGET%\ungooglium_ds"
+
+curl -fsSL "%BROWSER_URL%" -o "%API_TMP%"
+if errorlevel 1 (
+  echo [WARN] Could not fetch browser release info.
+  exit /b 1
+)
+
+for /f "delims=" %%U in ('powershell -NoProfile -Command "(Get-Content '%API_TMP%' | ConvertFrom-Json).assets | Where-Object { $_.name -like '*win64*.7z' } | Select-Object -First 1 -ExpandProperty browser_download_url"') do set "DOWNLOAD_URL=%%U"
+
+if not defined DOWNLOAD_URL (
+  echo [WARN] Browser asset not found in release.
+  exit /b 1
+)
+
+echo Downloading %DOWNLOAD_URL%...
+curl -fL "%DOWNLOAD_URL%" -o "%ARCHIVE%"
+if errorlevel 1 (
+  echo [WARN] Download failed. Get manually: https://github.com/portapps/ungoogled-chromium-portable/releases
+  exit /b 1
+)
+
+set "SEVENZIP="
+if exist "C:\Program Files\7-Zip\7z.exe" set "SEVENZIP=C:\Program Files\7-Zip\7z.exe"
+if exist "C:\Program Files (x86)\7-Zip\7z.exe" set "SEVENZIP=C:\Program Files (x86)\7-Zip\7z.exe"
+if not defined SEVENZIP (
+  echo [WARN] 7-Zip not found. Install with: winget install 7zip.7zip
+  echo [WARN] Or extract %ARCHIVE% manually to %DST%
+  exit /b 1
+)
+
+"%SEVENZIP%" x "%ARCHIVE%" "-o%DST%" -y >nul
+if errorlevel 1 (
+  echo [WARN] Extraction failed.
+  exit /b 1
+)
+
+REM Find chromium exe in extracted files and move to expected name
+for /r "%DST%" %%F in (*chromium*.exe) do (
+  if /i not "%%~nxF"=="ungoogled-chromium-portable.exe" (
+    copy /y "%%F" "%DST%\ungoogled-chromium-portable.exe" >nul
+  )
+)
+
+if exist "%DST%\ungoogled-chromium-portable.exe" (
+  echo [OK] Browser installed: %DST%\ungoogled-chromium-portable.exe
+) else (
+  echo [WARN] Browser exe not found after extraction.
+)
+
+del /f /q "%ARCHIVE%" 2>nul
+del /f /q "%API_TMP%" 2>nul
+exit /b 0
