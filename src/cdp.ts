@@ -30,11 +30,9 @@ export class CDPPage {
   private ws: WebSocket;
   private msgId = 0;
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
-  private sessionId: string;
 
-  constructor(ws: WebSocket, sessionId: string) {
+  constructor(ws: WebSocket) {
     this.ws = ws;
-    this.sessionId = sessionId;
     this.ws.on("message", (data: Buffer) => this.onMessage(data.toString()));
   }
 
@@ -53,7 +51,7 @@ export class CDPPage {
     const id = ++this.msgId;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params, sessionId: this.sessionId }));
+      this.ws.send(JSON.stringify({ id, method, params }));
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
@@ -171,7 +169,7 @@ export async function launchOrConnect(): Promise<{ browser: CDPBrowser; page: CD
     ws.once("error", (e) => reject(e));
   });
 
-  const page = new CDPPage(ws, target.id);
+  const page = new CDPPage(ws);
   try {
     await page.evaluate(`(async () => { await document.readyState; })()`, true);
   } catch {}

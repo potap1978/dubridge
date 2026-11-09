@@ -11884,10 +11884,8 @@ var CDPPage = class {
   ws;
   msgId = 0;
   pending = /* @__PURE__ */ new Map();
-  sessionId;
-  constructor(ws, sessionId) {
+  constructor(ws) {
     this.ws = ws;
-    this.sessionId = sessionId;
     this.ws.on("message", (data) => this.onMessage(data.toString()));
   }
   onMessage(raw) {
@@ -11908,7 +11906,7 @@ var CDPPage = class {
     const id = ++this.msgId;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params, sessionId: this.sessionId }));
+      this.ws.send(JSON.stringify({ id, method, params }));
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
@@ -12028,7 +12026,7 @@ async function launchOrConnect() {
     ws.once("open", () => resolve());
     ws.once("error", (e) => reject(e));
   });
-  const page = new CDPPage(ws, target.id);
+  const page = new CDPPage(ws);
   try {
     await page.evaluate(`(async () => { await document.readyState; })()`, true);
   } catch {
