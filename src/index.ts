@@ -187,7 +187,6 @@ program
 
     const { browser, page } = await launchOrConnect();
     console.log(chalk.gray("Chrome ready. Log in to DeepSeek in the opened window, then wait."));
-    await new Promise((r) => setTimeout(r, 4000));
 
     const prompt = opts.prompt ?? "Start.";
     const systemPrompt = config.skipSystemPrompt ? prompt : loadSystemPrompt();

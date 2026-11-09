@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=2
+// DUBRIDGE_BUILD=3
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -11947,9 +11947,16 @@ var CDPPage = class {
   async waitForSelector(selector, timeoutMs) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      const found = await this.evaluate(`!!document.querySelector(${JSON.stringify(selector)})`);
-      if (found) return;
-      await new Promise((r) => setTimeout(r, 300));
+      try {
+        const found = await this.evaluate(`(() => {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) return false;
+          return el.offsetWidth > 0 || el.offsetHeight > 0 || el.getClientRects().length > 0;
+        })()`);
+        if (found) return;
+      } catch {
+      }
+      await new Promise((r) => setTimeout(r, 1e3));
     }
     throw new Error(`timeout waiting for selector: ${selector}`);
   }
@@ -12042,17 +12049,33 @@ async function sendPrompt(page, text) {
     '[contenteditable="true"]',
     'div[role="textbox"]'
   ];
-  let found = false;
-  for (const sel of selectors) {
-    try {
-      await page.waitForSelector(sel, 3e3);
-      await page.click(sel);
-      found = true;
-      break;
-    } catch {
+  const start = Date.now();
+  const timeout = 10 * 60 * 1e3;
+  let foundSel = null;
+  while (Date.now() - start < timeout) {
+    for (const sel of selectors) {
+      try {
+        const visible = await page.evaluate(`(() => {
+          const el = document.querySelector(${JSON.stringify(sel)});
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        })()`);
+        if (visible) {
+          foundSel = sel;
+          break;
+        }
+      } catch {
+      }
     }
+    if (foundSel) break;
+    if (Math.round((Date.now() - start) / 1e3) % 10 === 0) {
+      console.log(`[dubridge] Waiting for chat input... (${Math.round((Date.now() - start) / 1e3)}s)`);
+    }
+    await new Promise((r) => setTimeout(r, 1e3));
   }
-  if (!found) throw new Error(`input field not found. Tried: ${selectors.join(", ")}`);
+  if (!foundSel) throw new Error(`timeout waiting for input field. Tried: ${selectors.join(", ")}`);
+  await page.click(foundSel);
   await page.insertText(text);
   await page.pressEnter();
 }
@@ -12642,7 +12665,6 @@ program2.command("run").description("Start agent loop in workspace").option("-w,
   }
   const { browser, page } = await launchOrConnect();
   console.log(source_default.gray("Chrome ready. Log in to DeepSeek in the opened window, then wait."));
-  await new Promise((r) => setTimeout(r, 4e3));
   const prompt = opts.prompt ?? "Start.";
   const systemPrompt = config.skipSystemPrompt ? prompt : loadSystemPrompt();
   await sendPrompt(page, `${systemPrompt}
