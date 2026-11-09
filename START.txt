@@ -1,0 +1,28 @@
+Запуск dubridge (Windows)
+=========================
+
+1) Проверить Node (нужен 20.12+). В комплекте уже есть .\node\node.exe:
+   node -v
+
+2) Запустить всё одной командой:
+   run.bat
+   — поднимает ungoogled-chromium-portable с --remote-debugging-port=9222,
+     ждёт порт, затем запускает dubridge (--no-preflight).
+
+3) В открывшемся окне браузера откройте https://chat.deepseek.com и войдите.
+   Сессия сохраняется в профиле portable-браузера, повторный вход не нужен.
+
+4) Диагностика окружения:
+   doctor.bat
+
+Ручной запуск (без run.bat):
+   set "PATH=%~dp0node;%PATH%"
+   node dubridge\dist\cli.js --no-preflight
+
+Настройки — в .env: рабочая директория, ритм цикла, whitelist команд,
+путь к системному промпту (DUB_PROMPT_FILE), путь к Python для SSH (DUB_PYTHON).
+
+SSH-инструменты (ssh_probe / ssh_exec / ssh_copy) работают через Python+paramiko:
+конфиг берётся из ~/.ssh/config, ключи из ~/.ssh, хосты сверяются с ~/.ssh/known_hosts.
+Убедитесь, что Python 3 установлен (python --version) и есть paramiko:
+   python -m pip install paramiko

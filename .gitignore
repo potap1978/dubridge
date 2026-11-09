@@ -1,0 +1,12 @@
+# Chrome cache (regenerated on first run)
+ungooglium_ds/data/Default/Cache/
+ungooglium_ds/data/Default/Code Cache/
+ungooglium_ds/data/Default/GPUCache/
+ungooglium_ds/data/GPUPersistentCache/
+ungooglium_ds/data/GrShaderCache/
+ungooglium_ds/data/ShaderCache/
+
+# Browser data that may contain secrets/tokens
+ungooglium_ds/data/Default/IndexedDB/
+ungooglium_ds/data/Default/Local Storage/
+ungooglium_ds/data/Default/Session Storage/

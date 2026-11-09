@@ -1,0 +1,20 @@
+# ungoogled-chromium-portable.yml
+
+# Общие настройки для всех приложений Portapps
+common:
+  # Отключить логирование (true/false)
+  disable_log: true
+  # Дополнительные аргументы командной строки, передаваемые в Chrome
+  args:
+    - --app=https://chat.deepseek.com
+    - --window-size=1200,800
+    - --remote-debugging-port=9222
+    - --test-type
+  # - "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE chat.deepseek.com, EXCLUDE api.deepseek.com, EXCLUDE cdn.deepseek.com, EXCLUDE gator.volces.com, EXCLUDE fe-static.deepseek.com, EXCLUDE static.deepseek.com, EXCLUDE cdn.deepseek.com, EXCLUDE *edge.sdk.awswaf.com, EXCLUDE *.hcaptcha.com"
+  # Переменные окружения
+  env: {}
+
+# Специфичные настройки для Ungoogled Chromium
+app:
+  # Очищать ли временные папки при выходе (true/false)
+  cleanup: true

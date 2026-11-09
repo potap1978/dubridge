@@ -1,0 +1,11 @@
+{
+  "id": "ungoogled-chromium-portable",
+  "guid": "{D0116FB7-CD20-4BDA-9248-3E6F5FB6B1B7}",
+  "name": "Ungoogled Chromium Portable",
+  "version": "150.0.7871.255",
+  "release": "22",
+  "date": "2026/09/20 08:43:39",
+  "publisher": "CrazyMax",
+  "url": "https://github.com/portapps/ungoogled-chromium-portable",
+  "portapps_version": "3.19.0"
+}

@@ -1,0 +1,33 @@
+{
+  "name": "dubridge",
+  "version": "0.1.5",
+  "description": "Превращает веб-версию chat.deepseek.com в локального агента, умеющего работать с файлами на этой машине (прямое подключение по CDP + замкнутый цикл вызовов инструментов)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "bin": {
+    "dubridge": "./dist/cli.js",
+    "dubridge-launch-chrome": "./dist/launch-chrome.js"
+  },
+  "files": [
+    "dist",
+    "prompts",
+    "README.md",
+    ".env.example"
+  ],
+  "scripts": {
+    "start": "node dist/cli.js",
+    "doctor": "node dist/cli.js --doctor",
+    "launch-chrome": "node dist/launch-chrome.js",
+    "test": "echo \"Tests not available in dist build\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/potap1978/dubridge.git"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "zod": "^3.25.0"
+  }
+}
