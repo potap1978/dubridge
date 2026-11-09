@@ -30,16 +30,18 @@ if (-not $ChromeExe) {
 $EnvFile = Join-Path $TargetDir ".env"
 $Port = 9222
 $Workspace = Join-Path $TargetDir "Work-dir"
+$PromptFile = Join-Path $TargetDir "prompts\deepseek-system-prompt.md"
 
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | ForEach-Object {
         if ($_ -match '^\s*DUB_CDP_PORT\s*=\s*(\d+)') { $Port = [int]$Matches[1] }
         if ($_ -match '^\s*DUB_WORKSPACE_ROOT\s*=\s*(.+)$') { $Workspace = $Matches[1].Trim() }
+        if ($_ -match '^\s*DUB_PROMPT_FILE\s*=\s*(.+)$') { $PromptFile = $Matches[1].Trim() }
     }
 }
 
 $env:DUB_CDP_PORT = $Port
-$env:DUB_PROMPT_FILE = Join-Path $TargetDir "prompts\deepseek-system-prompt.md"
+$env:DUB_PROMPT_FILE = $PromptFile
 $env:DUB_WORKSPACE_ROOT = $Workspace
 
 $portOpen = $false
@@ -82,12 +84,10 @@ $LocalMjs = Join-Path $TargetDir "dubridge.mjs"
 $NeedDownload = $false
 
 if (-not (Test-Path $LocalMjs)) {
-    Write-Host "[..] dubridge.mjs not found, downloading..."
     $NeedDownload = $true
 } else {
     $content = Get-Content $LocalMjs -Raw -ErrorAction SilentlyContinue
-    if ($content -notmatch "DUBRIDGE_BUILD=11") {
-        Write-Host "[..] dubridge.mjs is stale, updating..."
+    if ($content -notmatch "DUBRIDGE_BUILD=12") {
         $NeedDownload = $true
     }
 }
@@ -96,7 +96,6 @@ if ($NeedDownload) {
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri "https://raw.githubusercontent.com/potap1978/dubridge/main/dubridge.mjs" -OutFile $LocalMjs -UseBasicParsing -TimeoutSec 60
-        Write-Host "[OK] dubridge.mjs updated"
     } catch {
         Write-Host "[Error] Failed to download dubridge.mjs: $($_.Exception.Message)" -ForegroundColor Red
         Read-Host "Press Enter to exit"

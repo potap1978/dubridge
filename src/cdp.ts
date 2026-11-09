@@ -191,12 +191,12 @@ export class CDPPage {
         (function() {
           const el = document.getElementById('dubridge-stats');
           if (!el) return;
+          const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n.toString();
           el.innerHTML = 
-            '<div>Суммарный объём ≈ ' + ${totalChars}.toLocaleString() + ' симв.</div>' +
+            '<div>Суммарный объём ≈ ' + fmt(${totalChars}) + ' симв.</div>' +
             '<div>Сообщений отправлено ' + ${messagesSent} + ' раунд(ов)</div>' +
             '<div>Вызовов инструментов ' + ${toolRounds} + ' раунд(ов)</div>' +
-            '<div>Вызовов инструмента ' + ${toolCalls} + ' раз</div>' +
-            '<div style="margin-top:8px;color:#888;">из них размышления ' + Math.round(${totalChars} * 0.4).toLocaleString() + ' симв.</div>';
+            '<div>Вызовов инструмента ' + ${toolCalls} + ' раз</div>';
         })();
       `);
     } catch {}

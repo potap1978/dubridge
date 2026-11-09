@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=11
+// DUBRIDGE_BUILD=12
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -12041,12 +12041,12 @@ var CDPPage = class {
         (function() {
           const el = document.getElementById('dubridge-stats');
           if (!el) return;
+          const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n.toString();
           el.innerHTML = 
-            '<div>\u0421\u0443\u043C\u043C\u0430\u0440\u043D\u044B\u0439 \u043E\u0431\u044A\u0451\u043C \u2248 ' + ${totalChars}.toLocaleString() + ' \u0441\u0438\u043C\u0432.</div>' +
+            '<div>\u0421\u0443\u043C\u043C\u0430\u0440\u043D\u044B\u0439 \u043E\u0431\u044A\u0451\u043C \u2248 ' + fmt(${totalChars}) + ' \u0441\u0438\u043C\u0432.</div>' +
             '<div>\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E ' + ${messagesSent} + ' \u0440\u0430\u0443\u043D\u0434(\u043E\u0432)</div>' +
             '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u043E\u0432 ' + ${toolRounds} + ' \u0440\u0430\u0443\u043D\u0434(\u043E\u0432)</div>' +
-            '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430 ' + ${toolCalls} + ' \u0440\u0430\u0437</div>' +
-            '<div style="margin-top:8px;color:#888;">\u0438\u0437 \u043D\u0438\u0445 \u0440\u0430\u0437\u043C\u044B\u0448\u043B\u0435\u043D\u0438\u044F ' + Math.round(${totalChars} * 0.4).toLocaleString() + ' \u0441\u0438\u043C\u0432.</div>';
+            '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430 ' + ${toolCalls} + ' \u0440\u0430\u0437</div>';
         })();
       `);
     } catch {
