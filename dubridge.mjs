@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=3
+// DUBRIDGE_BUILD=4
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
