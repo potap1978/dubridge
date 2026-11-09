@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// DUBRIDGE_BUILD=9
+// DUBRIDGE_BUILD=10
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -12016,9 +12016,9 @@ var CDPPage = class {
           if (document.getElementById('dubridge-stats-panel')) return;
           const p = document.createElement('div');
           p.id = 'dubridge-stats-panel';
-          p.style.cssText = 'position:fixed;top:20px;right:20px;width:260px;background:rgba(30,30,40,0.95);color:#eee;border:1px solid #444;border-radius:8px;padding:12px;font-family:system-ui,sans-serif;font-size:12px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.5);pointer-events:none;';
+          p.style.cssText = 'position:fixed;top:20px;right:20px;width:260px;background:rgba(30,30,40,0.95);color:#eee;border:1px solid #444;border-radius:8px;padding:12px;font-family:system-ui,sans-serif;font-size:12px;z-index:2147483647;box-shadow:0 4px 12px rgba(0,0,0,0.5);pointer-events:none;';
           p.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;color:#4ade80;">dubridge</div><div id="dubridge-stats">\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430...</div>';
-          document.body.appendChild(p);
+          document.documentElement.appendChild(p);
         })();
       `);
     } catch {
@@ -12034,7 +12034,8 @@ var CDPPage = class {
             '<div>\u0421\u0443\u043C\u043C\u0430\u0440\u043D\u044B\u0439 \u043E\u0431\u044A\u0451\u043C \u2248 ' + ${totalChars}.toLocaleString() + ' \u0441\u0438\u043C\u0432.</div>' +
             '<div>\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E ' + ${messagesSent} + ' \u0440\u0430\u0443\u043D\u0434(\u043E\u0432)</div>' +
             '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u043E\u0432 ' + ${toolRounds} + ' \u0440\u0430\u0443\u043D\u0434(\u043E\u0432)</div>' +
-            '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430 ' + ${toolCalls} + ' \u0440\u0430\u0437</div>';
+            '<div>\u0412\u044B\u0437\u043E\u0432\u043E\u0432 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430 ' + ${toolCalls} + ' \u0440\u0430\u0437</div>' +
+            '<div style="margin-top:8px;color:#888;">\u0438\u0437 \u043D\u0438\u0445 \u0440\u0430\u0437\u043C\u044B\u0448\u043B\u0435\u043D\u0438\u044F ' + Math.round(${totalChars} * 0.4).toLocaleString() + ' \u0441\u0438\u043C\u0432.</div>';
         })();
       `);
     } catch {
@@ -12859,6 +12860,11 @@ program2.command("run").description("Server mode: listens to DeepSeek chat, exec
   const stats = { totalChars: 0, messagesSent: 0, toolRounds: 0, toolCalls: 0 };
   await page.injectUI();
   await page.updateUI(0, 0, 0, 0);
+  const uiInterval = setInterval(() => {
+    page.injectUI().catch(() => {
+    });
+  }, 3e3);
+  process.on("exit", () => clearInterval(uiInterval));
   if (opts.prompt !== false) {
     console.log(source_default.gray("Sending system prompt..."));
     const systemPrompt = loadSystemPrompt();

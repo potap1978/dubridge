@@ -166,9 +166,9 @@ export class CDPPage {
           if (document.getElementById('dubridge-stats-panel')) return;
           const p = document.createElement('div');
           p.id = 'dubridge-stats-panel';
-          p.style.cssText = 'position:fixed;top:20px;right:20px;width:260px;background:rgba(30,30,40,0.95);color:#eee;border:1px solid #444;border-radius:8px;padding:12px;font-family:system-ui,sans-serif;font-size:12px;z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.5);pointer-events:none;';
+          p.style.cssText = 'position:fixed;top:20px;right:20px;width:260px;background:rgba(30,30,40,0.95);color:#eee;border:1px solid #444;border-radius:8px;padding:12px;font-family:system-ui,sans-serif;font-size:12px;z-index:2147483647;box-shadow:0 4px 12px rgba(0,0,0,0.5);pointer-events:none;';
           p.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;color:#4ade80;">dubridge</div><div id="dubridge-stats">Загрузка...</div>';
-          document.body.appendChild(p);
+          document.documentElement.appendChild(p);
         })();
       `);
     } catch {}
@@ -184,7 +184,8 @@ export class CDPPage {
             '<div>Суммарный объём ≈ ' + ${totalChars}.toLocaleString() + ' симв.</div>' +
             '<div>Сообщений отправлено ' + ${messagesSent} + ' раунд(ов)</div>' +
             '<div>Вызовов инструментов ' + ${toolRounds} + ' раунд(ов)</div>' +
-            '<div>Вызовов инструмента ' + ${toolCalls} + ' раз</div>';
+            '<div>Вызовов инструмента ' + ${toolCalls} + ' раз</div>' +
+            '<div style="margin-top:8px;color:#888;">из них размышления ' + Math.round(${totalChars} * 0.4).toLocaleString() + ' симв.</div>';
         })();
       `);
     } catch {}

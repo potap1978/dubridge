@@ -40,8 +40,7 @@ if (Test-Path $EnvFile) {
     }
 }
 
-Write-Host "[..] using CDP port: $Port"
-Write-Host "[..] using workspace: $Workspace"
+# (removed verbose output to match original run.bat)
 
 $env:DUB_CDP_PORT = $Port
 $env:DUB_PROMPT_FILE = $PromptsFile
@@ -72,7 +71,7 @@ try {
 if ($portOpen) {
     Write-Host "[OK] port $Port is already available"
 } else {
-    Write-Host "[..] starting browser on port $Port..."
+    Write-Host "[..] starting browser..."
     if (-not (Test-Path $ProfileDir)) { New-Item -ItemType Directory -Path $ProfileDir | Out-Null }
     Start-Process -FilePath $ChromeExe -ArgumentList "--remote-debugging-port=$Port", "--user-data-dir=$ProfileDir", "--no-first-run", "--no-default-browser-check", "https://chat.deepseek.com/"
 
@@ -108,7 +107,7 @@ if (-not (Test-Path $LocalMjs)) {
 } else {
     # Check if this is a stale build (missing marker)
     $content = Get-Content $LocalMjs -Raw -ErrorAction SilentlyContinue
-    if ($content -notmatch "DUBRIDGE_BUILD=9") {
+    if ($content -notmatch "DUBRIDGE_BUILD=10") {
         Write-Host "[..] dubridge.mjs is stale, updating..."
         $NeedDownload = $true
     }
@@ -126,7 +125,6 @@ if ($NeedDownload) {
     }
 }
 
-Write-Host "[dubridge] server mode: write tasks in the browser chat."
 & node $LocalMjs run --no-launch -w $Workspace
 
 Write-Host ""
