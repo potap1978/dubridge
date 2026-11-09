@@ -12,7 +12,7 @@ REM ==============================
 REM Auto-restore LFS binaries if missing (Chrome, Node)
 if not exist "%CHROME_EXE%" (
   echo [..] Восстанавливаем LFS-бинарники (Chrome, Node)...  
-  git lfs pull
+  if exist "setup.bat" call setup.bat
   if not exist "%CHROME_EXE%" (
     echo [Error] не удалось восстановить %CHROME_EXE%
     echo Установите git-lfs: https://git-lfs.github.com/
