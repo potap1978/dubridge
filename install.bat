@@ -4,7 +4,6 @@ setlocal
 
 REM ============================================================
 REM dubridge standalone installer (no npm required)
-REM Downloads all files to C:\DeepSeek and fetches the browser.
 REM ============================================================
 
 set "TARGET=C:\DeepSeek"
@@ -42,7 +41,7 @@ if not exist "%TARGET%\.env" (
 )
 
 echo [6/6] Downloading browser (~162 MB)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Continue'; $api='https://api.github.com/repos/portapps/ungoogled-chromium-portable/releases/latest'; $h=@{'User-Agent'='dubridge'}; $r=Invoke-RestMethod -Uri $api -Headers $h; $a=$r.assets | Where-Object {$_.name -like '*win64*.7z'} | Select-Object -First 1; $tmp=Join-Path $env:TEMP 'dubridge_browser.7z'; Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp; $z=Get-Command 7z -ErrorAction SilentlyContinue; if (-not $z) { $z=Get-Command 'C:\Program Files\7-Zip\7z.exe' -ErrorAction SilentlyContinue }; if ($z) { & $z.Source x $tmp \"-o$env:TARGET\" -y } else { Write-Host '[WARN] 7-Zip not found. Download manually: https://github.com/portapps/ungoogled-chromium-portable/releases'; Write-Host \"Saved archive: $tmp\" }; Remove-Item $tmp -ErrorAction SilentlyContinue"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Continue'; $api='https://api.github.com/repos/portapps/ungoogled-chromium-portable/releases/latest'; $h=@{'User-Agent'='dubridge'}; $r=Invoke-RestMethod -Uri $api -Headers $h; $a=$r.assets | Where-Object {$_.name -like '*win64*.7z'} | Select-Object -First 1; $tmp=Join-Path $env:TEMP 'dubridge_browser.7z'; $dst='C:\DeepSeek\ungooglium_ds'; Invoke-WebRequest -Uri $a.browser_download_url -OutFile $tmp; $z=Get-Command 7z -ErrorAction SilentlyContinue; if (-not $z) { $z=Get-Command 'C:\Program Files\7-Zip\7z.exe' -ErrorAction SilentlyContinue }; if ($z) { & $z.Source x $tmp \"-o$dst\" -y } else { Write-Host '[WARN] 7-Zip not found. Download manually: https://github.com/portapps/ungoogled-chromium-portable/releases'; Write-Host \"Saved archive: $tmp\" }; $exe=Get-ChildItem -Path $dst -Filter '*chromium*.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1; if ($exe) { $target=Join-Path $dst 'ungoogled-chromium-portable.exe'; if ($exe.FullName -ne $target) { Copy-Item $exe.FullName $target -Force }; Write-Host \"[OK] browser: $target\" } else { Write-Host '[WARN] browser exe not found after extraction' }; Remove-Item $tmp -ErrorAction SilentlyContinue"
 
 echo.
 echo ============================================================

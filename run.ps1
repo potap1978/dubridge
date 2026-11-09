@@ -1,8 +1,32 @@
 $ErrorActionPreference = "Continue"
 
 $TargetDir = $PSScriptRoot
-$ChromeExe = Join-Path $TargetDir "ungooglium_ds\ungoogled-chromium-portable.exe"
 $ProfileDir = Join-Path $TargetDir "chrome-profile"
+
+# Find browser exe (may have been extracted to different location)
+$ChromeExe = $null
+$candidates = @(
+    (Join-Path $TargetDir "ungooglium_ds\ungoogled-chromium-portable.exe"),
+    (Join-Path $TargetDir "ungoogled-chromium-portable.exe"),
+    (Join-Path $TargetDir "ungoogled-chromium-portable\ungoogled-chromium-portable.exe")
+)
+foreach ($c in $candidates) { if (Test-Path $c) { $ChromeExe = $c; break } }
+if (-not $ChromeExe) {
+    $found = Get-ChildItem -Path $TargetDir -Filter "*chromium*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) {
+        $dst = Join-Path $TargetDir "ungooglium_ds\ungoogled-chromium-portable.exe"
+        if (-not (Test-Path (Split-Path $dst))) { New-Item -ItemType Directory -Path (Split-Path $dst) -Force | Out-Null }
+        Copy-Item $found.FullName $dst -Force
+        $ChromeExe = $dst
+        Write-Host "[..] found browser at $($found.FullName), copied to $dst"
+    }
+}
+if (-not $ChromeExe) {
+    Write-Host "[Error] ungoogled-chromium-portable.exe not found in $TargetDir" -ForegroundColor Red
+    Write-Host "Re-run install.bat or download from https://github.com/portapps/ungoogled-chromium-portable/releases"
+    Read-Host "Press Enter to exit"
+    exit 1
+}
 $EnvFile = Join-Path $TargetDir ".env"
 $PromptsFile = Join-Path $TargetDir "prompts\deepseek-system-prompt.md"
 $Port = 9222
