@@ -217,4 +217,11 @@ program
     }
   });
 
-program.parseAsync(process.argv).catch((e) => { console.error(e); process.exit(1); });
+// No arguments → run setup (fallback if postinstall was blocked by npm 11)
+if (process.argv.length <= 2) {
+  setup()
+    .then(() => process.exit(0))
+    .catch((e) => { console.error(e); process.exit(1); });
+} else {
+  program.parseAsync(process.argv).catch((e) => { console.error(e); process.exit(1); });
+}

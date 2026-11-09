@@ -25,7 +25,7 @@ const common = {
   format: "esm",
   target: "node20",
   sourcemap: false,
-  minify: true,
+  minify: false,
   external: ["ssh2"],
   logLevel: "info",
   plugins: [tsResolvePlugin],
@@ -34,6 +34,6 @@ const common = {
   },
 };
 
-await build({ ...common, entryPoints: ["src/index.ts"], outfile: "bin/dubridge.js" });
+await build({ ...common, entryPoints: ["src/index.ts"], outfile: "dubridge.mjs" });
 
-console.log("[build] done: bin/dubridge.js");
+console.log("[build] done: dubridge.mjs");

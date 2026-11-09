@@ -4,11 +4,11 @@
   "description": "Turn chat.deepseek.com web session into a local coding agent (CDP, sandboxed tools)",
   "type": "module",
   "bin": {
-    "dubridge": "bin/dubridge.js"
+    "dubridge": "dubridge.mjs"
   },
-  "main": "bin/dubridge.js",
+  "main": "dubridge.mjs",
   "files": [
-    "bin",
+    "dubridge.mjs",
     "prompts",
     "README.md",
     "LICENSE",
