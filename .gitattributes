@@ -1,0 +1,12 @@
+# Windows batch files must have CRLF (cmd.exe requires it)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts should keep LF
+*.sh text eol=lf
+
+# Ensure these are treated as binary
+*.7z binary
+*.exe binary
+*.png binary
+*.jpg binary

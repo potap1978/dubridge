@@ -30,7 +30,17 @@ export async function setup() {
             console.warn(`[setup] WARN: source not found: ${src}`);
         }
     };
-    copy(path.join(pkgRoot, "run.bat"), path.join(targetDir, "run.bat"));
+    // Copy run.bat with forced CRLF line endings (cmd.exe requires CRLF)
+    const runBatSrc = path.join(pkgRoot, "run.bat");
+    const runBatDst = path.join(targetDir, "run.bat");
+    if (fs.existsSync(runBatSrc)) {
+        const content = fs.readFileSync(runBatSrc, "utf8").replace(/\r?\n/g, "\r\n");
+        fs.writeFileSync(runBatDst, content, "utf8");
+        console.log(`[setup] Copied run.bat (CRLF) -> ${runBatDst}`);
+    }
+    else {
+        console.warn(`[setup] WARN: source not found: ${runBatSrc}`);
+    }
     copy(path.join(pkgRoot, "prompts", "deepseek-system-prompt.md"), path.join(targetDir, "prompts", "deepseek-system-prompt.md"));
     const envExample = path.join(pkgRoot, ".env.example");
     const envTarget = path.join(targetDir, ".env");
